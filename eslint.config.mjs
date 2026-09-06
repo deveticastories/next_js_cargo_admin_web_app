@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Reference-only design mockup (see AGENTS instructions) — not part of the app build.
+    "cargo-console.jsx",
   ]),
 ]);
 
