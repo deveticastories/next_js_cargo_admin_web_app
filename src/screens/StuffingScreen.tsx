@@ -12,6 +12,7 @@ import { ArrowRightLeft, Download } from "lucide-react";
 import { useCargoData } from "@/components/providers/CargoDataProvider";
 import { Button } from "@/components/ui/Button";
 import { DataTable } from "@/components/ui/DataTable";
+import { Loading } from "@/components/ui/Loading";
 import { api, ApiError } from "@/utils/apiClient";
 import { downloadText, fmtDate } from "@/utils/format";
 import type { Booking } from "@/types";
@@ -76,7 +77,7 @@ export function StuffingScreen() {
           </select>
         </div>
         <div className="cc-mini-label">Ready-to-ship bookings available for stuffing</div>
-        {error && <div className="cc-error" style={{ marginBottom: 12 }}>{error}</div>}
+        {error && <div className="cc-alert-error" style={{ marginBottom: 12 }}>{error}</div>}
         {eligible.length === 0 ? (
           <div className="cc-empty">No ready-to-ship bookings are waiting to be stuffed.</div>
         ) : (
@@ -131,7 +132,7 @@ export function StuffingScreen() {
           <div className="cc-panel-title">UAE store — incoming log</div>
         </div>
         {uaeStoreLog.loading ? (
-          <div className="cc-empty">Loading…</div>
+          <Loading />
         ) : (
           <DataTable
             emptyText="Nothing has arrived at the UAE store yet."

@@ -7,6 +7,7 @@ import { StatCard } from "@/components/ui/StatCard";
 import { DataTable } from "@/components/ui/DataTable";
 import { Badge } from "@/components/ui/Badge";
 import { BookingsBarChart } from "@/components/charts/BookingsBarChart";
+import { colors } from "@/utils/colors";
 import { money } from "@/utils/format";
 
 const FLOW_STEPS = ["Booking", "Repack / Ready to ship", "Stuffing", "Invoicing"];
@@ -47,9 +48,10 @@ export function DashboardScreen() {
           label="Total bookings"
           value={bookings.items.length}
           note={`${bookings.items.filter((b) => b.status === "Active").length} active`}
+          noteColor={colors.success}
         />
-        <StatCard label="Bundles ready to ship" value={readyBundles} />
-        <StatCard label="Active containers" value={activeContainers} />
+        <StatCard label="Bundles ready to ship" value={readyBundles} note="Packed and waiting" noteColor={colors.success} />
+        <StatCard label="Active containers" value={activeContainers} note="In rotation" noteColor={colors.info} />
         <StatCard label="Expense logged" value={money(monthExpense)} />
         <StatCard label="Active staff" value={activeStaff} />
       </div>

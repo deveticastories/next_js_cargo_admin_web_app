@@ -21,6 +21,7 @@ import { SearchBar } from "@/components/ui/SearchBar";
 import { DataTable } from "@/components/ui/DataTable";
 import { Modal } from "@/components/ui/Modal";
 import { Field } from "@/components/ui/Field";
+import { Loading } from "@/components/ui/Loading";
 import { Plus } from "lucide-react";
 
 export interface MasterViewProps<T extends RecordWithId> {
@@ -144,9 +145,9 @@ export function MasterView<T extends RecordWithId>({
           </Button>
         </div>
       </div>
-      {loadError && <div className="cc-error" style={{ padding: "0 18px 12px" }}>{loadError}</div>}
+      {loadError && <div className="cc-alert-error" style={{ margin: "14px 18px 0" }}>{loadError}</div>}
       {loading ? (
-        <div className="cc-empty">Loading…</div>
+        <Loading />
       ) : (
         <DataTable columns={allColumns} rows={filtered} onEdit={openEdit} onDelete={handleDelete} />
       )}

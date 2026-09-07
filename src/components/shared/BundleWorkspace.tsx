@@ -23,6 +23,7 @@ import { api, ApiError } from "@/utils/apiClient";
 import { downloadText } from "@/utils/format";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
+import { Loading } from "@/components/ui/Loading";
 
 function emptyLine(): BundleLineItem {
   return { netWeight: "", grossWeight: "", product: "", qty: "", fabric: "", description: "" };
@@ -161,11 +162,11 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
         </div>
       </div>
 
-      {error && <div className="cc-error" style={{ marginBottom: 12 }}>{error}</div>}
+      {error && <div className="cc-alert-error" style={{ marginBottom: 12 }}>{error}</div>}
 
       {bookingId ? (
         loadingList ? (
-          <div className="cc-empty">Loading packing list…</div>
+          <Loading />
         ) : (
           <>
             <div className="cc-mini-label">Packing list</div>

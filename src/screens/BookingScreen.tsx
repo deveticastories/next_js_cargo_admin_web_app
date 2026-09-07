@@ -10,6 +10,7 @@ import { DataTable } from "@/components/ui/DataTable";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { Field } from "@/components/ui/Field";
+import { Loading } from "@/components/ui/Loading";
 import { ApiError } from "@/utils/apiClient";
 import { fmtDate, todayISO, toDateInputValue } from "@/utils/format";
 import type { Booking } from "@/types";
@@ -89,9 +90,9 @@ export function BookingScreen() {
             </Button>
           </div>
         </div>
-        {bookings.error && <div className="cc-error" style={{ padding: "0 18px 12px" }}>{bookings.error}</div>}
+        {bookings.error && <div className="cc-alert-error" style={{ margin: "14px 18px 0" }}>{bookings.error}</div>}
         {bookings.loading ? (
-          <div className="cc-empty">Loading…</div>
+          <Loading />
         ) : (
           <DataTable
             columns={[

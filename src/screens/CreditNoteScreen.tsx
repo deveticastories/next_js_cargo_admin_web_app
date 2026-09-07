@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { DataTable } from "@/components/ui/DataTable";
 import { Modal } from "@/components/ui/Modal";
 import { Field } from "@/components/ui/Field";
+import { Loading } from "@/components/ui/Loading";
 import { ApiError } from "@/utils/apiClient";
 import { fmtDate, money, todayISO } from "@/utils/format";
 
@@ -50,7 +51,7 @@ export function CreditNoteScreen() {
           </Button>
         </div>
         {creditNotes.loading ? (
-          <div className="cc-empty">Loading…</div>
+          <Loading />
         ) : (
           <DataTable
             columns={[

@@ -60,7 +60,16 @@ export const NAV: NavGroup[] = [
   { group: "Reports", items: [{ href: "/admin/reports", label: "Reports", icon: BarChart3 }] },
 ];
 
-/** `[title, subtitle]` for the topbar, keyed by pathname. */
+/** "Group / Label" for the topbar breadcrumb, e.g. "Masters / Stores". */
+export function getBreadcrumb(pathname: string): string {
+  for (const group of NAV) {
+    const item = group.items.find((i) => i.href === pathname);
+    if (item) return `${group.group} / ${item.label}`;
+  }
+  return "Cargo Admin";
+}
+
+/** `[title, subtitle]` for the page head, keyed by pathname. */
 export const PAGE_TITLES: Record<string, [string, string]> = {
   "/admin": ["Dashboard", "A quick look at today's operations"],
   "/admin/team": ["Team", "Admins and employees who use this admin panel"],

@@ -1,6 +1,10 @@
 /**
  * Cargo Admin color tokens.
  *
+ * Palette matches the "Cargo Admin.dc.html" design reference: a deep forest
+ * green instead of navy/orange, expressed in OKLCH (perceptually uniform,
+ * so tints/shades stay consistent — see https://oklch.com).
+ *
  * This is the single source of truth for every color used in the admin panel.
  * The same values are mirrored as CSS custom properties in
  * `src/app/admin/admin.css` (under `.cc-root`) so plain CSS classes can
@@ -12,33 +16,39 @@
  */
 
 export const colors = {
-  navy: "#0E2337",
-  navySoft: "#173350",
-  navyLine: "#24405E",
+  // Sidebar / dark surfaces
+  ink: "oklch(0.24 0.02 155)",
+  inkSoft: "oklch(0.30 0.025 155)",
+  inkLine: "oklch(0.34 0.02 155)",
 
-  accent: "#DD8A34",
-  accentDark: "#B9701F",
-  accentSoft: "#F7E4CB",
+  // Brand green — primary buttons, links, active states
+  accent: "oklch(0.42 0.09 155)",
+  accentDark: "oklch(0.36 0.09 155)",
+  accentSoft: "oklch(0.95 0.03 155)",
 
-  bg: "#EEF2F0",
+  bg: "oklch(0.985 0.004 150)",
   surface: "#FFFFFF",
-  border: "#DCE3E0",
+  border: "oklch(0.92 0.008 155)",
 
-  text: "#152436",
-  textSoft: "#5C6C77",
-  textFaint: "#8B98A1",
+  text: "oklch(0.24 0.012 155)",
+  textSoft: "oklch(0.52 0.012 155)",
+  textFaint: "oklch(0.65 0.012 155)",
 
-  success: "#2E8F5C",
-  successBg: "#E1F3E7",
+  success: "oklch(0.46 0.09 155)",
+  successBg: "oklch(0.95 0.03 155)",
 
-  danger: "#C1443A",
-  dangerBg: "#FBE9E6",
+  danger: "oklch(0.50 0.13 25)",
+  dangerBg: "oklch(0.96 0.03 25)",
 
-  warn: "#B9701F",
-  warnBg: "#FBECD9",
+  warn: "oklch(0.50 0.10 70)",
+  warnBg: "oklch(0.96 0.04 80)",
 
-  info: "#2A6FA8",
-  infoBg: "#E3EEF7",
+  info: "oklch(0.48 0.09 250)",
+  infoBg: "oklch(0.955 0.03 250)",
+
+  // Extra accent used sparingly (e.g. a "Superadmin"-style role pill)
+  violet: "oklch(0.44 0.10 300)",
+  violetBg: "oklch(0.955 0.03 300)",
 } as const;
 
 export type ColorToken = keyof typeof colors;
