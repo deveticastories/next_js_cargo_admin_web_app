@@ -34,6 +34,13 @@ export function BookingScreen() {
   const readyBundles = bookings.items
     .filter((b) => b.repackingStatus === "Ready to Ship")
     .reduce((sum, b) => sum + Number(b.bundleCount || 0), 0);
+  // Bundle count total per unit of measure, across every booking.
+  const bundleTypeTotals: Record<string, number> = { Bundle: 0, Box: 0, CBM: 0, KG: 0 };
+  for (const b of bookings.items) {
+    if (b.bundleType && b.bundleType in bundleTypeTotals) {
+      bundleTypeTotals[b.bundleType] += Number(b.bundleCount || 0);
+    }
+  }
 
   const openNew = () => {
     setForm({
@@ -98,6 +105,10 @@ export function BookingScreen() {
       <div className="cc-stat-grid">
         <StatCard label="Total bookings" value={bookings.items.length} />
         <StatCard label="Ready-to-ship bundles" value={readyBundles} />
+        <StatCard label="Box" value={bundleTypeTotals.Box} />
+        <StatCard label="Bundles" value={bundleTypeTotals.Bundle} />
+        <StatCard label="CBM" value={bundleTypeTotals.CBM} />
+        <StatCard label="KG" value={bundleTypeTotals.KG} />
       </div>
       <div className="cc-card">
         <div className="cc-panel-head">
