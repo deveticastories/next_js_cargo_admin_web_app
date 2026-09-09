@@ -103,7 +103,12 @@ export function InvoicingScreen() {
         <Field
           field={{ key: "b", label: "Booking ID", type: "select", options: bookings.items.map((b) => b.code) }}
           value={booking?.code ?? ""}
-          onChange={(_, code) => setBookingId(bookings.items.find((b) => b.code === code)?.id ?? "")}
+          onChange={(_, code) => {
+            const picked = bookings.items.find((b) => b.code === code);
+            setBookingId(picked?.id ?? "");
+            // Pre-fill from the charge recorded at booking time, if any — still editable below.
+            setPickupCharge(String(picked?.pickupCharge ?? 0));
+          }}
         />
         {booking && (
           <>

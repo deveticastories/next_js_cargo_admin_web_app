@@ -21,6 +21,14 @@ const bookingSchema = new Schema(
     repackingStatus: { type: String, enum: ["Ready to Ship", "Repacking Required"], default: "Repacking Required" },
     status: { type: String, enum: ["Active", "Inactive"], default: "Active" },
     stuffed: { type: Boolean, default: false },
+    // Conditional extra charges from the booking form — each only applies
+    // under its own condition (see the matching comment on `Booking` in
+    // src/types); the form itself zeroes out whichever ones don't apply
+    // before saving, so a stored non-zero value always means "this
+    // booking's condition held at save time."
+    brandHandlingCharge: { type: Number, default: 0, min: 0 },
+    pickupCharge: { type: Number, default: 0, min: 0 },
+    bundleHandlingCharge: { type: Number, default: 0, min: 0 },
   },
   baseSchemaOptions
 );

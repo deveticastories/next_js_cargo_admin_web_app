@@ -58,9 +58,20 @@ export function BookingScreen() {
       setError("Sender, receiver, pickup option and bundle count are required.");
       return;
     }
+    // Each extra charge only applies under its own condition — zero it out
+    // here (regardless of what's still sitting in the hidden field) so a
+    // charge typed in while its condition held can never be saved once the
+    // booking no longer meets it (e.g. product type switched away from
+    // "Branded" after a brand handling charge was entered).
+    const payload = {
+      ...form,
+      brandHandlingCharge: form.productType === "Branded" ? Number(form.brandHandlingCharge) || 0 : 0,
+      pickupCharge: form.billOption === "Without Bill" ? Number(form.pickupCharge) || 0 : 0,
+      bundleHandlingCharge: Number(form.bundleCount) < 5 ? Number(form.bundleHandlingCharge) || 0 : 0,
+    };
     try {
-      if (modalRow === "new") await bookings.create(form);
-      else await bookings.update(modalRow as string, form);
+      if (modalRow === "new") await bookings.create(payload);
+      else await bookings.update(modalRow as string, payload);
       setModalRow(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong. Please try again.");
@@ -77,6 +88,10 @@ export function BookingScreen() {
   };
 
   const set = (k: string, v: string) => setForm({ ...form, [k]: v });
+
+  const showBrandHandlingCharge = form.productType === "Branded";
+  const showPickupCharge = form.billOption === "Without Bill";
+  const showBundleHandlingCharge = Number(form.bundleCount) > 0 && Number(form.bundleCount) < 5;
 
   return (
     <div>
@@ -140,6 +155,27 @@ export function BookingScreen() {
             <Field field={{ key: "productType", label: "Product type", type: "select", options: ["Branded", "Normal"] }} value={form.productType} onChange={set} />
             <Field field={{ key: "repackingStatus", label: "Pack status", type: "select", options: ["Ready to Ship", "Repacking Required"] }} value={form.repackingStatus} onChange={set} />
           </div>
+          {(showBrandHandlingCharge || showPickupCharge || showBundleHandlingCharge) && (
+            <div className="cc-grid-2">
+              {showBrandHandlingCharge && (
+                <Field
+                  field={{ key: "brandHandlingCharge", label: "Brand handling charge", type: "number" }}
+                  value={form.brandHandlingCharge}
+                  onChange={set}
+                />
+              )}
+              {showPickupCharge && (
+                <Field field={{ key: "pickupCharge", label: "Pickup charge", type: "number" }} value={form.pickupCharge} onChange={set} />
+              )}
+              {showBundleHandlingCharge && (
+                <Field
+                  field={{ key: "bundleHandlingCharge", label: "Bundle handling charge (below 5 bundles)", type: "number" }}
+                  value={form.bundleHandlingCharge}
+                  onChange={set}
+                />
+              )}
+            </div>
+          )}
           <Field field={{ key: "status", label: "Status", type: "select", options: ["Active", "Inactive"] }} value={form.status} onChange={set} />
           {error && <div className="cc-error">{error}</div>}
         </Modal>

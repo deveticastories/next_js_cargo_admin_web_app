@@ -98,6 +98,12 @@ export interface Booking extends BaseRecord {
   productType: ProductType | "";
   repackingStatus: RepackingStatus | "";
   stuffed: boolean;
+  /** Only meaningful when `productType` is "Branded" — 0 otherwise. */
+  brandHandlingCharge: number;
+  /** Only meaningful when `billOption` is "Without Bill" — 0 otherwise. */
+  pickupCharge: number;
+  /** Only meaningful when `bundleCount` is below 5 — 0 otherwise. */
+  bundleHandlingCharge: number;
 }
 
 export interface Container extends BaseRecord {
