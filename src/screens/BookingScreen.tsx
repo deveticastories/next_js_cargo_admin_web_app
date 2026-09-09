@@ -10,7 +10,7 @@ import { DataTable } from "@/components/ui/DataTable";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { Field } from "@/components/ui/Field";
-import { Loading } from "@/components/ui/Loading";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import { ApiError } from "@/utils/apiClient";
 import { fmtDate, todayISO, toDateInputValue } from "@/utils/format";
 import type { Booking } from "@/types";
@@ -22,6 +22,8 @@ export function BookingScreen() {
   const [modalRow, setModalRow] = useState<string | "new" | null>(null);
   const [form, setForm] = useState<Record<string, unknown>>({});
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const pickupOptions = [
     "Our Pickup Boy",
@@ -76,21 +78,27 @@ export function BookingScreen() {
       pickupCharge: form.billOption === "Without Bill" ? Number(form.pickupCharge) || 0 : 0,
       bundleHandlingCharge: Number(form.bundleCount) < 5 ? Number(form.bundleHandlingCharge) || 0 : 0,
     };
+    setSaving(true);
     try {
       if (modalRow === "new") await bookings.create(payload);
       else await bookings.update(modalRow as string, payload);
       setModalRow(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong. Please try again.");
+    } finally {
+      setSaving(false);
     }
   };
 
   const removeBooking = async (row: Booking) => {
     if (!window.confirm(`Delete booking ${row.code}?`)) return;
+    setDeletingId(row.id);
     try {
       await bookings.remove(row.id);
     } catch (err) {
       alert(err instanceof ApiError ? err.message : "Failed to delete booking.");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -125,7 +133,7 @@ export function BookingScreen() {
         </div>
         {bookings.error && <div className="cc-alert-error" style={{ margin: "14px 18px 0" }}>{bookings.error}</div>}
         {bookings.loading ? (
-          <Loading />
+          <SkeletonTable columns={12} />
         ) : (
           <DataTable
             columns={[
@@ -144,11 +152,18 @@ export function BookingScreen() {
             rows={filtered}
             onEdit={openEdit}
             onDelete={removeBooking}
+            busyRowId={deletingId}
           />
         )}
       </div>
       {modalRow && (
-        <Modal title={modalRow === "new" ? "New booking" : "Edit booking"} onClose={() => setModalRow(null)} onSubmit={save} submitLabel="Save booking">
+        <Modal
+          title={modalRow === "new" ? "New booking" : "Edit booking"}
+          onClose={() => setModalRow(null)}
+          onSubmit={save}
+          submitLabel="Save booking"
+          submitting={saving}
+        >
           <div className="cc-grid-2">
             <Field field={{ key: "sender", label: "Sender", type: "select", options: senders.items.map((s) => s.name) }} value={form.sender} onChange={set} />
             <Field field={{ key: "receiver", label: "Receiver", type: "select", options: receivers.items.map((r) => r.name) }} value={form.receiver} onChange={set} />

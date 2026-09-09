@@ -13,7 +13,7 @@ import { Download } from "lucide-react";
 import { useCargoData } from "@/components/providers/CargoDataProvider";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
-import { Loading } from "@/components/ui/Loading";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { api } from "@/utils/apiClient";
 import { downloadText, fmtDate, money } from "@/utils/format";
 import type { BundleLineItem } from "@/types";
@@ -169,7 +169,11 @@ export function InvoicingScreen() {
               Packing list ({packingRows.length} item{packingRows.length === 1 ? "" : "s"})
             </div>
             {loadingPackingList ? (
-              <Loading />
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <Skeleton height={12} width="65%" />
+                <Skeleton height={12} width="55%" />
+                <Skeleton height={12} width="45%" />
+              </div>
             ) : packingRows.length === 0 ? (
               <div className="cc-empty">No packing list recorded for this booking yet.</div>
             ) : (

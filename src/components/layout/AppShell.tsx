@@ -33,7 +33,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       <Sidebar open={sidebarOpen} onNavigate={() => setSidebarOpen(false)} email={email} />
       <div className="cc-main">
         <Topbar onOpenMenu={() => setSidebarOpen(true)} />
-        <div className="cc-content">
+        {/* Keyed by route so `.cc-content`'s entrance animation (see admin.css) replays on
+            every navigation, instead of only once on first page load. */}
+        <div className="cc-content" key={pathname}>
           <div className="cc-page-head">
             <div>
               <div className="cc-page-title cc-h">{title}</div>

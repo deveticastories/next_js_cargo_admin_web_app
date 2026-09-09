@@ -101,7 +101,7 @@ export function LoginScreen() {
             </span>
           </div>
 
-          <Button type="submit" variant="primary" className="cc-login-submit" disabled={submitting}>
+          <Button type="submit" variant="primary" className="cc-login-submit" loading={submitting}>
             {submitting ? "Signing in…" : "Sign in to dashboard"}
           </Button>
         </form>

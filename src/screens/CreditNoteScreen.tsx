@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { DataTable } from "@/components/ui/DataTable";
 import { Modal } from "@/components/ui/Modal";
 import { Field } from "@/components/ui/Field";
-import { Loading } from "@/components/ui/Loading";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import { ApiError } from "@/utils/apiClient";
 import { fmtDate, money, todayISO } from "@/utils/format";
 
@@ -18,6 +18,7 @@ export function CreditNoteScreen() {
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState<{ amount?: string; description?: string }>({});
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const balance = creditNotes.items.reduce((sum, c) => sum + Number(c.amount || 0), 0);
 
   const save = async () => {
@@ -25,6 +26,7 @@ export function CreditNoteScreen() {
       setError("Enter an amount.");
       return;
     }
+    setSaving(true);
     try {
       await creditNotes.create({ date: todayISO(), amount: form.amount, description: form.description || "" });
       setModalOpen(false);
@@ -32,6 +34,8 @@ export function CreditNoteScreen() {
       setError("");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to add fund.");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -51,7 +55,7 @@ export function CreditNoteScreen() {
           </Button>
         </div>
         {creditNotes.loading ? (
-          <Loading />
+          <SkeletonTable columns={3} />
         ) : (
           <DataTable
             columns={[
@@ -64,7 +68,7 @@ export function CreditNoteScreen() {
         )}
       </div>
       {modalOpen && (
-        <Modal title="Add fund" onClose={() => setModalOpen(false)} onSubmit={save} submitLabel="Add fund">
+        <Modal title="Add fund" onClose={() => setModalOpen(false)} onSubmit={save} submitLabel="Add fund" submitting={saving}>
           <Field field={{ key: "amount", label: "Amount", type: "number" }} value={form.amount} onChange={(_, v) => setForm({ ...form, amount: v })} />
           <Field field={{ key: "description", label: "Description", type: "textarea" }} value={form.description} onChange={(_, v) => setForm({ ...form, description: v })} />
           {error && <div className="cc-error">{error}</div>}

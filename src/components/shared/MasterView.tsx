@@ -21,7 +21,7 @@ import { SearchBar } from "@/components/ui/SearchBar";
 import { DataTable } from "@/components/ui/DataTable";
 import { Modal } from "@/components/ui/Modal";
 import { Field } from "@/components/ui/Field";
-import { Loading } from "@/components/ui/Loading";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Plus } from "lucide-react";
 
 export interface MasterViewProps<T extends RecordWithId> {
@@ -55,6 +55,10 @@ export function MasterView<T extends RecordWithId>({
   const [modalRow, setModalRow] = useState<string | "new" | null>(null);
   const [form, setForm] = useState<Record<string, unknown>>({});
   const [formError, setFormError] = useState("");
+  const [saving, setSaving] = useState(false);
+  // Which row's delete/status-toggle request is currently in flight — DataTable dims that
+  // row's action so a second click can't fire while the first is still saving.
+  const [busyRowId, setBusyRowId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     if (!query.trim()) return rows;
@@ -88,31 +92,40 @@ export function MasterView<T extends RecordWithId>({
         return;
       }
     }
+    setSaving(true);
     try {
       if (modalRow === "new") await create(form);
       else await update(modalRow as string, form);
       close();
     } catch (err) {
       setFormError(errorMessage(err, "Something went wrong. Please try again."));
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleDelete = async (row: T) => {
     const label = (row as { name?: string; code?: string }).name || (row as { code?: string }).code || row.id;
     if (!window.confirm(`Remove ${label}?`)) return;
+    setBusyRowId(row.id);
     try {
       await remove(row.id);
     } catch (err) {
       alert(errorMessage(err, "Failed to delete."));
+    } finally {
+      setBusyRowId(null);
     }
   };
 
   const toggleStatus = async (row: T) => {
     const current = (row as { status?: Status }).status;
+    setBusyRowId(row.id);
     try {
       await update(row.id, { status: current === "Active" ? "Inactive" : "Active" });
     } catch (err) {
       alert(errorMessage(err, "Failed to update status."));
+    } finally {
+      setBusyRowId(null);
     }
   };
 
@@ -123,7 +136,14 @@ export function MasterView<T extends RecordWithId>({
           key: "status",
           label: "Status",
           render: (row) => (
-            <span onClick={() => toggleStatus(row)} style={{ cursor: "pointer" }}>
+            <span
+              onClick={() => busyRowId !== row.id && toggleStatus(row)}
+              style={
+                busyRowId === row.id
+                  ? { cursor: "default", opacity: 0.5, pointerEvents: "none" }
+                  : { cursor: "pointer" }
+              }
+            >
               <Badge value={(row as { status?: Status }).status} />
             </span>
           ),
@@ -147,13 +167,13 @@ export function MasterView<T extends RecordWithId>({
       </div>
       {loadError && <div className="cc-alert-error" style={{ margin: "14px 18px 0" }}>{loadError}</div>}
       {loading ? (
-        <Loading />
+        <SkeletonTable columns={allColumns.length + 1} />
       ) : (
-        <DataTable columns={allColumns} rows={filtered} onEdit={openEdit} onDelete={handleDelete} />
+        <DataTable columns={allColumns} rows={filtered} onEdit={openEdit} onDelete={handleDelete} busyRowId={busyRowId} />
       )}
       {footer?.(rows)}
       {modalRow && (
-        <Modal title={modalRow === "new" ? `Add ${title}` : `Edit ${title}`} onClose={close} onSubmit={save}>
+        <Modal title={modalRow === "new" ? `Add ${title}` : `Edit ${title}`} onClose={close} onSubmit={save} submitting={saving}>
           {fields.map((f) => (
             <Field
               key={f.key}

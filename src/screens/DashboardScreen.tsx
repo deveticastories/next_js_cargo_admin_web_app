@@ -6,6 +6,7 @@ import { useCargoData } from "@/components/providers/CargoDataProvider";
 import { StatCard } from "@/components/ui/StatCard";
 import { DataTable } from "@/components/ui/DataTable";
 import { Badge } from "@/components/ui/Badge";
+import { Skeleton, SkeletonStatGrid, SkeletonTable } from "@/components/ui/Skeleton";
 import { BookingsBarChart } from "@/components/charts/BookingsBarChart";
 import { colors } from "@/utils/colors";
 import { money } from "@/utils/format";
@@ -15,6 +16,7 @@ const FLOW_STEPS = ["Booking", "Repack / Ready to ship", "Stuffing", "Invoicing"
 /** Landing screen: today's key numbers, the booking flow, and recent activity. */
 export function DashboardScreen() {
   const { bookings, containers, dailyExpenses, employees } = useCargoData();
+  const loading = bookings.loading || containers.loading || dailyExpenses.loading || employees.loading;
 
   const readyBundles = bookings.items
     .filter((b) => b.repackingStatus === "Ready to Ship")
@@ -43,37 +45,53 @@ export function DashboardScreen() {
         ))}
       </div>
 
-      <div className="cc-stat-grid">
-        <StatCard
-          label="Total bookings"
-          value={bookings.items.length}
-          note={`${bookings.items.filter((b) => b.status === "Active").length} active`}
-          noteColor={colors.success}
-        />
-        <StatCard label="Bundles ready to ship" value={readyBundles} note="Packed and waiting" noteColor={colors.success} />
-        <StatCard label="Active containers" value={activeContainers} note="In rotation" noteColor={colors.info} />
-        <StatCard label="Expense logged" value={money(monthExpense)} />
-        <StatCard label="Active staff" value={activeStaff} />
-      </div>
+      {loading ? (
+        <SkeletonStatGrid count={5} />
+      ) : (
+        <div className="cc-stat-grid">
+          <StatCard
+            label="Total bookings"
+            value={bookings.items.length}
+            note={`${bookings.items.filter((b) => b.status === "Active").length} active`}
+            noteColor={colors.success}
+          />
+          <StatCard label="Bundles ready to ship" value={readyBundles} note="Packed and waiting" noteColor={colors.success} />
+          <StatCard label="Active containers" value={activeContainers} note="In rotation" noteColor={colors.info} />
+          <StatCard label="Expense logged" value={money(monthExpense)} />
+          <StatCard label="Active staff" value={activeStaff} />
+        </div>
+      )}
 
       <div className="cc-two-col">
         <div className="cc-card" style={{ padding: 18 }}>
           <div className="cc-mini-label">Bookings by month</div>
-          <BookingsBarChart data={monthly} />
+          {loading ? (
+            <div style={{ display: "flex", alignItems: "flex-end", gap: 10, height: 200, padding: "0 4px 4px" }}>
+              {[70, 45, 85, 55, 60, 40].map((h, i) => (
+                <Skeleton key={i} width="100%" height={`${h}%`} radius={4} />
+              ))}
+            </div>
+          ) : (
+            <BookingsBarChart data={monthly} />
+          )}
         </div>
         <div className="cc-card">
           <div className="cc-panel-head">
             <div className="cc-panel-title">Recent bookings</div>
           </div>
-          <DataTable
-            columns={[
-              { key: "code", label: "Booking ID" },
-              { key: "sender", label: "Sender" },
-              { key: "receiver", label: "Receiver" },
-              { key: "repackingStatus", label: "Status", render: (r) => <Badge value={r.repackingStatus} /> },
-            ]}
-            rows={bookings.items.slice(-5).reverse()}
-          />
+          {loading ? (
+            <SkeletonTable columns={4} rows={5} />
+          ) : (
+            <DataTable
+              columns={[
+                { key: "code", label: "Booking ID" },
+                { key: "sender", label: "Sender" },
+                { key: "receiver", label: "Receiver" },
+                { key: "repackingStatus", label: "Status", render: (r) => <Badge value={r.repackingStatus} /> },
+              ]}
+              rows={bookings.items.slice(-5).reverse()}
+            />
+          )}
         </div>
       </div>
     </div>

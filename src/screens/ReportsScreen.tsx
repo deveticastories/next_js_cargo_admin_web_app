@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useCargoData } from "@/components/providers/CargoDataProvider";
 import { Button } from "@/components/ui/Button";
 import { DataTable } from "@/components/ui/DataTable";
+import { Skeleton, SkeletonTable } from "@/components/ui/Skeleton";
 import { BookingsBarChart } from "@/components/charts/BookingsBarChart";
 
 type ReportTab = "monthly" | "container" | "country" | "customer";
@@ -19,6 +20,7 @@ const TABS: { key: ReportTab; label: string }[] = [
 export function ReportsScreen() {
   const { bookings, containers, stuffings, receivers } = useCargoData();
   const [tab, setTab] = useState<ReportTab>("monthly");
+  const loading = bookings.loading || containers.loading || stuffings.loading || receivers.loading;
 
   const monthly = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -66,44 +68,64 @@ export function ReportsScreen() {
       {tab === "monthly" && (
         <div className="cc-card" style={{ padding: 18 }}>
           <div className="cc-mini-label">Bookings per month</div>
-          <BookingsBarChart data={monthly} height={240} />
+          {loading ? (
+            <div style={{ display: "flex", alignItems: "flex-end", gap: 10, height: 240, padding: "0 4px 4px" }}>
+              {[60, 80, 40, 70, 50, 85, 35].map((h, i) => (
+                <Skeleton key={i} width="100%" height={`${h}%`} radius={4} />
+              ))}
+            </div>
+          ) : (
+            <BookingsBarChart data={monthly} height={240} />
+          )}
         </div>
       )}
       {tab === "container" && (
         <div className="cc-card">
-          <DataTable
-            columns={[
-              { key: "code", label: "Container" },
-              { key: "company", label: "Shipping line" },
-              { key: "bookings", label: "Bookings stuffed" },
-            ]}
-            rows={byContainer}
-            emptyText="No containers yet."
-          />
+          {loading ? (
+            <SkeletonTable columns={3} />
+          ) : (
+            <DataTable
+              columns={[
+                { key: "code", label: "Container" },
+                { key: "company", label: "Shipping line" },
+                { key: "bookings", label: "Bookings stuffed" },
+              ]}
+              rows={byContainer}
+              emptyText="No containers yet."
+            />
+          )}
         </div>
       )}
       {tab === "country" && (
         <div className="cc-card">
-          <DataTable
-            columns={[
-              { key: "country", label: "Country" },
-              { key: "count", label: "Bookings" },
-            ]}
-            rows={byCountry}
-            emptyText="No bookings yet."
-          />
+          {loading ? (
+            <SkeletonTable columns={2} />
+          ) : (
+            <DataTable
+              columns={[
+                { key: "country", label: "Country" },
+                { key: "count", label: "Bookings" },
+              ]}
+              rows={byCountry}
+              emptyText="No bookings yet."
+            />
+          )}
         </div>
       )}
       {tab === "customer" && (
         <div className="cc-card">
-          <DataTable
-            columns={[
-              { key: "sender", label: "Sender" },
-              { key: "count", label: "Bookings" },
-            ]}
-            rows={byCustomer}
-            emptyText="No bookings yet."
-          />
+          {loading ? (
+            <SkeletonTable columns={2} />
+          ) : (
+            <DataTable
+              columns={[
+                { key: "sender", label: "Sender" },
+                { key: "count", label: "Bookings" },
+              ]}
+              rows={byCustomer}
+              emptyText="No bookings yet."
+            />
+          )}
         </div>
       )}
     </div>

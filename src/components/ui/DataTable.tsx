@@ -9,6 +9,8 @@ export interface DataTableProps<T extends RecordWithId> {
   onEdit?: (row: T) => void;
   onDelete?: (row: T) => void;
   emptyText?: string;
+  /** Id of the row whose delete/status-toggle request is in flight, if any — that row's delete button spins and every action on it disables. */
+  busyRowId?: string | null;
 }
 
 /** Generic list table — every module (bookings, containers, senders, …) renders through this. */
@@ -18,6 +20,7 @@ export function DataTable<T extends RecordWithId>({
   onEdit,
   onDelete,
   emptyText = "No records yet.",
+  busyRowId = null,
 }: DataTableProps<T>) {
   if (!rows.length) return <div className="cc-empty">{emptyText}</div>;
 
@@ -35,31 +38,34 @@ export function DataTable<T extends RecordWithId>({
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
-            <tr key={row.id}>
-              {columns.map((c) => (
-                <td key={c.key}>
-                  {c.render ? c.render(row) : String((row as unknown as Record<string, unknown>)[c.key] ?? "")}
-                </td>
-              ))}
-              {showActions && (
-                <td>
-                  <div style={{ display: "flex", gap: 4 }}>
-                    {onEdit && (
-                      <Button variant="ghost" onClick={() => onEdit(row)} aria-label="Edit">
-                        <Pencil size={15} />
-                      </Button>
-                    )}
-                    {onDelete && (
-                      <Button variant="ghost" onClick={() => onDelete(row)} aria-label="Delete">
-                        <Trash2 size={15} color={colors.danger} />
-                      </Button>
-                    )}
-                  </div>
-                </td>
-              )}
-            </tr>
-          ))}
+          {rows.map((row) => {
+            const isBusy = busyRowId === row.id;
+            return (
+              <tr key={row.id}>
+                {columns.map((c) => (
+                  <td key={c.key}>
+                    {c.render ? c.render(row) : String((row as unknown as Record<string, unknown>)[c.key] ?? "")}
+                  </td>
+                ))}
+                {showActions && (
+                  <td>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      {onEdit && (
+                        <Button variant="ghost" onClick={() => onEdit(row)} disabled={isBusy} aria-label="Edit">
+                          <Pencil size={15} />
+                        </Button>
+                      )}
+                      {onDelete && (
+                        <Button variant="ghost" onClick={() => onDelete(row)} loading={isBusy} aria-label="Delete">
+                          {!isBusy && <Trash2 size={15} color={colors.danger} />}
+                        </Button>
+                      )}
+                    </div>
+                  </td>
+                )}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
