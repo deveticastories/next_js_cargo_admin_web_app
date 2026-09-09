@@ -16,15 +16,20 @@ export const ACCESS_TOKEN_MAX_AGE_SECONDS = 15 * 60;
 const REFRESH_TOKEN_TTL = "7d";
 export const REFRESH_TOKEN_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
+/** Which collection `sub` belongs to — `Admin` (the seeded super admin) or `Employee` (a Team member). */
+export type AccountKind = "admin" | "employee";
+
 export interface AccessTokenPayload {
   sub: string;
   email: string;
   role: string;
+  kind: AccountKind;
 }
 
 export interface RefreshTokenPayload {
   sub: string;
   v: number;
+  kind: AccountKind;
 }
 
 function secret(name: "JWT_ACCESS_SECRET" | "JWT_REFRESH_SECRET"): Uint8Array {

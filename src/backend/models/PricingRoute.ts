@@ -7,7 +7,7 @@ const pricingRouteSchema = new Schema(
   {
     from: { type: String, required: true, trim: true },
     to: { type: String, required: true, trim: true },
-    uom: { type: String, enum: ["Kg", "Bundle", "Box", "Pallet"], required: true },
+    uom: { type: String, enum: ["Bundle", "Box", "CBM", "KG"], required: true },
     price: { type: String, required: true },
   },
   baseSchemaOptions

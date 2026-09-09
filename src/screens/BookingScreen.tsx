@@ -36,7 +36,14 @@ export function BookingScreen() {
     .reduce((sum, b) => sum + Number(b.bundleCount || 0), 0);
 
   const openNew = () => {
-    setForm({ date: todayISO(), billOption: "With Bill", repackingStatus: "Repacking Required", status: "Active" });
+    setForm({
+      date: todayISO(),
+      billOption: "With Bill",
+      bundleType: "Bundle",
+      productType: "Normal",
+      repackingStatus: "Repacking Required",
+      status: "Active",
+    });
     setModalRow("new");
     setError("");
   };
@@ -101,6 +108,8 @@ export function BookingScreen() {
               { key: "receiver", label: "Receiver" },
               { key: "date", label: "Date", render: (r) => fmtDate(r.date) },
               { key: "bundleCount", label: "Bundles" },
+              { key: "bundleType", label: "Bundle type" },
+              { key: "productType", label: "Product type" },
               { key: "billOption", label: "Bill", render: (r) => <Badge value={r.billOption} /> },
               { key: "repackingStatus", label: "Pack status", render: (r) => <Badge value={r.repackingStatus} /> },
               { key: "stuffed", label: "Stuffed", render: (r) => (r.stuffed ? <Badge value="Stuffed" /> : "—") },
@@ -125,6 +134,10 @@ export function BookingScreen() {
           </div>
           <div className="cc-grid-2">
             <Field field={{ key: "bundleCount", label: "Bundle count", type: "number" }} value={form.bundleCount} onChange={set} />
+            <Field field={{ key: "bundleType", label: "Bundle type", type: "select", options: ["Bundle", "Box", "CBM", "KG"] }} value={form.bundleType} onChange={set} />
+          </div>
+          <div className="cc-grid-2">
+            <Field field={{ key: "productType", label: "Product type", type: "select", options: ["Branded", "Normal"] }} value={form.productType} onChange={set} />
             <Field field={{ key: "repackingStatus", label: "Pack status", type: "select", options: ["Ready to Ship", "Repacking Required"] }} value={form.repackingStatus} onChange={set} />
           </div>
           <Field field={{ key: "status", label: "Status", type: "select", options: ["Active", "Inactive"] }} value={form.status} onChange={set} />

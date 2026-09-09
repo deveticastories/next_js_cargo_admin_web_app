@@ -16,7 +16,7 @@ export function PricingScreen() {
       fields={[
         { key: "from", label: "From", required: true },
         { key: "to", label: "To", required: true },
-        { key: "uom", label: "Unit of measure", type: "select", options: ["Kg", "Bundle", "Box", "Pallet"], required: true },
+        { key: "uom", label: "Unit of measure", type: "select", options: ["Bundle", "Box", "CBM", "KG"], required: true },
         { key: "price", label: "Price", type: "number", required: true },
       ]}
       columns={[

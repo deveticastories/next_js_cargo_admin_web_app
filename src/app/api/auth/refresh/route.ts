@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { connectDB } from "@/backend/config/db";
 import { Admin } from "@/backend/models/Admin";
+import { Employee } from "@/backend/models/Employee";
 import { setAccessCookie } from "@/backend/utils/authCookies";
 import { REFRESH_TOKEN_COOKIE, signAccessToken, verifyRefreshToken } from "@/backend/utils/tokens";
 import { HttpError, withErrorHandling } from "@/backend/utils/apiResponse";
@@ -24,11 +25,17 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
     throw expired();
   }
 
-  const admin = await Admin.findById(payload.sub);
-  // `tokenVersion` mismatch means this refresh token was invalidated by a logout.
-  if (!admin || admin.tokenVersion !== payload.v) throw expired();
+  // Tokens signed before `kind` existed default to "admin" here — same as everywhere else it's read.
+  const kind = payload.kind === "employee" ? "employee" : "admin";
+  const account = kind === "employee" ? await Employee.findById(payload.sub) : await Admin.findById(payload.sub);
 
-  const accessToken = await signAccessToken({ sub: admin.id, email: admin.email, role: admin.role });
+  // `tokenVersion` mismatch means this refresh token was invalidated by a logout or password
+  // change; a deactivated employee is also cut off, even mid-session.
+  if (!account || account.tokenVersion !== payload.v || (kind === "employee" && account.status !== "Active")) {
+    throw expired();
+  }
+
+  const accessToken = await signAccessToken({ sub: account.id, email: account.email, role: account.role, kind });
   const res = NextResponse.json({ success: true });
   setAccessCookie(res, accessToken);
   return res;

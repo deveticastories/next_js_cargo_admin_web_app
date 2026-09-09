@@ -16,6 +16,8 @@ const bookingSchema = new Schema(
     date: { type: Date, required: true },
     billOption: { type: String, enum: ["With Bill", "Without Bill"], required: true },
     bundleCount: { type: Number, required: true, min: 1 },
+    bundleType: { type: String, enum: ["Bundle", "Box", "CBM", "KG"], required: true },
+    productType: { type: String, enum: ["Branded", "Normal"], required: true },
     repackingStatus: { type: String, enum: ["Ready to Ship", "Repacking Required"], default: "Repacking Required" },
     status: { type: String, enum: ["Active", "Inactive"], default: "Active" },
     stuffed: { type: Boolean, default: false },

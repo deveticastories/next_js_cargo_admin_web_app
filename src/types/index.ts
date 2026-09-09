@@ -12,6 +12,10 @@ export type Status = "Active" | "Inactive";
 
 export type BillOption = "With Bill" | "Without Bill";
 
+export type BundleType = "Bundle" | "Box" | "CBM" | "KG";
+
+export type ProductType = "Branded" | "Normal";
+
 export type RepackingStatus = "Ready to Ship" | "Repacking Required";
 
 export type PaymentType = "Cash" | "UPI";
@@ -31,6 +35,8 @@ export interface Employee extends BaseRecord {
   contact: string;
   bloodGroup?: string;
   role: EmployeeRole | "";
+  /** Login email. Optional — an employee without one can't sign in themselves. */
+  email?: string;
 }
 
 export interface Sender extends BaseRecord {
@@ -88,6 +94,8 @@ export interface Booking extends BaseRecord {
   date: string;
   billOption: BillOption | "";
   bundleCount: number;
+  bundleType: BundleType | "";
+  productType: ProductType | "";
   repackingStatus: RepackingStatus | "";
   stuffed: boolean;
 }
@@ -170,6 +178,7 @@ export interface FieldConfig {
   type?: FieldType;
   options?: string[];
   required?: boolean;
+  placeholder?: string;
 }
 
 export interface ColumnConfig<T> {

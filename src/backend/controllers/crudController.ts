@@ -4,7 +4,7 @@ import { connectDB } from "@/backend/config/db";
 import { requireAuth } from "@/backend/utils/auth";
 import { jsonError, readJsonBody, withErrorHandling } from "@/backend/utils/apiResponse";
 
-type RouteContext = { params: Promise<{ id: string }> };
+export type RouteContext = { params: Promise<{ id: string }> };
 
 /**
  * Builds the four handlers every simple master-data resource needs:

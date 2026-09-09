@@ -65,7 +65,7 @@ export function LoginScreen() {
           </p>
         </div>
 
-        <span className="cc-login-version">v1.0 · superadmin console</span>
+        <span className="cc-login-version">v1.0 · team console</span>
       </div>
 
       <div className="cc-login-form-wrap">

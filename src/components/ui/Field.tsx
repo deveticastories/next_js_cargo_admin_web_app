@@ -39,7 +39,7 @@ export function Field({ field, value, onChange, error }: FieldProps) {
       ) : field.type === "textarea" ? (
         <textarea rows={3} {...commonProps} />
       ) : (
-        <input type={field.type ?? "text"} {...commonProps} />
+        <input type={field.type ?? "text"} placeholder={field.placeholder} {...commonProps} />
       )}
       {error && <div className="cc-error">{error}</div>}
     </div>
