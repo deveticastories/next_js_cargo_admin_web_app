@@ -6,8 +6,15 @@
  * which action button appears at the bottom:
  *
  *   - "ready"  → bookings already marked Ready to Ship; "Save" persists the
- *                current items without downloading, "Download" persists and
- *                downloads the packing list for a bundle.
+ *                current bundle's items (repeat per bundle — pick a bundle,
+ *                add items, Save, pick the next bundle, ...). The "Added
+ *                items" table tracks just the selected booking's saved
+ *                bundles (cleared when you switch booking); "Download
+ *                ready-to-ship list", next to it, pulls every saved bundle
+ *                for that booking and downloads them together as one file.
+ *                "Saved packing lists" further below is unrelated to the
+ *                current selection — it's every item saved across every
+ *                Ready-to-ship booking.
  *   - "repack" → bookings still needing repacking; lets you record the
  *                bundle count after repacking and move it to Ready to ship.
  *
@@ -27,7 +34,7 @@ import { DataTable } from "@/components/ui/DataTable";
 import { Field } from "@/components/ui/Field";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 
-/** One flattened row of the ready-to-ship "Saved packing lists" table below the editor. */
+/** One flattened row of a ready-to-ship packing-list table (both "Added items" and "Saved packing lists"). */
 interface SavedItemRow extends BundleLineItem {
   id: string;
   bookingCode: string;
@@ -63,6 +70,8 @@ const LINE_COLUMNS: { key: keyof BundleLineItem; label: string }[] = [
 // row added afterward via "Add item" is a plain product line, with no
 // weight boxes at all.
 const WEIGHT_FIELDS = new Set<keyof BundleLineItem>(["netWeight", "grossWeight"]);
+const WEIGHT_COLUMNS = LINE_COLUMNS.filter((c) => WEIGHT_FIELDS.has(c.key));
+const PRODUCT_COLUMNS = LINE_COLUMNS.filter((c) => !WEIGHT_FIELDS.has(c.key));
 
 export interface BundleWorkspaceProps {
   mode: "ready" | "repack";
@@ -84,6 +93,8 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
   const [savedMessage, setSavedMessage] = useState("");
   const [savedRows, setSavedRows] = useState<SavedItemRow[]>([]);
   const [loadingSavedRows, setLoadingSavedRows] = useState(false);
+  const [addedItems, setAddedItems] = useState<SavedItemRow[]>([]);
+  const [loadingAddedItems, setLoadingAddedItems] = useState(false);
 
   const booking = bookings.items.find((b) => b.id === bookingId);
 
@@ -132,6 +143,40 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, bookings.items]);
 
+  /**
+   * Every saved packing-list item for one booking, across all of its saved
+   * bundles, flattened into table rows — scoped to whichever booking is
+   * currently selected. Feeds the "Added items" table, not "Saved packing
+   * lists" (which stays a global view across every Ready-to-ship booking).
+   */
+  const loadAddedItems = async (id: string) => {
+    if (!id) {
+      setAddedItems([]);
+      return;
+    }
+    setLoadingAddedItems(true);
+    try {
+      const lists = await api.get<{ bundleNumber: number; items: BundleLineItem[] }[]>(`/packing-lists?bookingId=${id}`);
+      const code = bookings.items.find((b) => b.id === id)?.code ?? id;
+      const rows: SavedItemRow[] = [];
+      lists
+        .slice()
+        .sort((a, b) => a.bundleNumber - b.bundleNumber)
+        .forEach((list) => {
+          list.items.forEach((item, index) => {
+            // Skip a still-blank default row — nothing's actually been recorded for it yet.
+            if (!item.product && !item.qty && !item.fabric && !item.description) return;
+            rows.push({ id: `${id}-${list.bundleNumber}-${index}`, bookingCode: code, bundleNumber: list.bundleNumber, ...item });
+          });
+        });
+      setAddedItems(rows);
+    } catch {
+      setAddedItems([]);
+    } finally {
+      setLoadingAddedItems(false);
+    }
+  };
+
   const loadLines = async (id: string, bundleNo: string) => {
     setLoadingList(true);
     try {
@@ -150,10 +195,17 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
     setBundle("1");
     setError("");
     setSavedMessage("");
+    // Clear the Added items table right away — it reloads scoped to the newly
+    // selected booking below, instead of lingering with the previous booking's rows.
+    setAddedItems([]);
     const b = bookings.items.find((x) => x.id === id);
     setAfterCount(b ? String(b.bundleCount) : "");
-    if (id) await loadLines(id, "1");
-    else setLines([emptyLine()]);
+    if (id) {
+      await loadLines(id, "1");
+      await loadAddedItems(id);
+    } else {
+      setLines([emptyLine()]);
+    }
   };
   const selectBundle = async (n: string) => {
     setBundle(n);
@@ -184,7 +236,7 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
     try {
       await persistLines();
       setSavedMessage(`Saved ${lines.length} item${lines.length === 1 ? "" : "s"} for Bundle ${bundle}.`);
-      await loadSavedRows();
+      await Promise.all([loadSavedRows(), loadAddedItems(bookingId)]);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to save the packing list.");
     } finally {
@@ -192,22 +244,37 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
     }
   };
 
-  const downloadList = async () => {
+  /**
+   * The Added items panel's "Download ready-to-ship list" button — persists
+   * whatever's currently open (in case the last bundle wasn't explicitly
+   * saved yet), then pulls every saved bundle for the selected booking and
+   * downloads them together, grouped by bundle.
+   */
+  const downloadAllBundles = async () => {
+    if (!bookingId) return;
     setSaving(true);
     setError("");
     setSavedMessage("");
     try {
       await persistLines();
-      const rows = lines
-        .map((l) => `${l.product} | Qty ${l.qty} | ${l.fabric} | Net ${l.netWeight}kg | Gross ${l.grossWeight}kg | ${l.description}`)
-        .join("\n");
+      const lists = await api.get<{ bundleNumber: number; items: BundleLineItem[] }[]>(`/packing-lists?bookingId=${bookingId}`);
+      const sections = lists
+        .slice()
+        .sort((a, b) => a.bundleNumber - b.bundleNumber)
+        .map((list) => {
+          const rows = list.items
+            .filter((l) => l.product || l.qty || l.fabric || l.description)
+            .map((l) => `${l.product} | Qty ${l.qty} | ${l.fabric} | Net ${l.netWeight}kg | Gross ${l.grossWeight}kg | ${l.description}`)
+            .join("\n");
+          return `Bundle ${list.bundleNumber}\n${rows || "(no items)"}`;
+        });
       downloadText(
-        `${booking?.code ?? bookingId}-bundle-${bundle}-ready-to-ship.txt`,
-        `Ready to ship list\nBooking: ${booking?.code}\nBundle: ${bundle}\n\n${rows}`
+        `${booking?.code ?? bookingId}-ready-to-ship.txt`,
+        `Ready to ship list\nBooking: ${booking?.code}\n\n${sections.join("\n\n")}`
       );
-      await loadSavedRows();
+      await Promise.all([loadSavedRows(), loadAddedItems(bookingId)]);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to save the packing list.");
+      setError(err instanceof ApiError ? err.message : "Failed to download the ready-to-ship list.");
     } finally {
       setSaving(false);
     }
@@ -274,53 +341,96 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
           ) : (
             <>
               <div className="cc-mini-label">Packing list</div>
-              <div className="cc-line-item-row" style={{ fontSize: 11.5, color: "var(--text-soft)", fontWeight: 600 }}>
-                {LINE_COLUMNS.map((c) => (
-                  <span key={c.key}>{c.label}</span>
-                ))}
-                <span></span>
-              </div>
-              {lines.map((line, index) => {
-                // The default first row is the one place ready-to-ship shows net/gross
-                // weight (read-only, whatever repacking recorded). Every row added
-                // afterward via "Add item" is a plain product line — no weight boxes.
-                const isDefaultRow = index === 0;
-                return (
-                  <div className="cc-line-item-row" key={index}>
-                    {LINE_COLUMNS.map((c) => {
-                      const isWeightField = WEIGHT_FIELDS.has(c.key);
-                      if (mode === "ready" && isWeightField && !isDefaultRow) {
-                        return <input key={c.key} className="cc-line-input" value="" disabled aria-hidden style={{ visibility: "hidden" }} />;
-                      }
-                      const readOnly = mode === "ready" && isWeightField;
-                      return (
+              {mode === "ready" ? (
+                // Ready-to-ship lays each item out as two rows: net/gross weight on top
+                // (read-only, whatever repacking recorded — default first row only) and
+                // the product fields below. The product columns get one shared header,
+                // with "Add item" sitting on its right instead of a full-width button.
+                <>
+                  <div className="cc-line-item-products-head">
+                    <div className="cc-line-item-products-head-labels">
+                      {PRODUCT_COLUMNS.map((c) => (
+                        <span key={c.key}>{c.label}</span>
+                      ))}
+                    </div>
+                    <Button size="sm" onClick={addLine}>
+                      <Plus size={14} /> Add item
+                    </Button>
+                  </div>
+                  {lines.map((line, index) => {
+                    const isDefaultRow = index === 0;
+                    return (
+                      <div className="cc-line-item-card" key={index}>
+                        {isDefaultRow && (
+                          <div className="cc-line-item-weights">
+                            {WEIGHT_COLUMNS.map((c) => (
+                              <div className="cc-line-field" key={c.key}>
+                                <label>{c.label}</label>
+                                <input
+                                  className="cc-line-input"
+                                  value={line[c.key]}
+                                  readOnly
+                                  title="Recorded during repacking — not editable here."
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div className="cc-line-item-products">
+                          {PRODUCT_COLUMNS.map((c) => (
+                            <input
+                              key={c.key}
+                              className="cc-line-input"
+                              value={line[c.key]}
+                              onChange={(e) => updateLine(index, c.key, e.target.value)}
+                            />
+                          ))}
+                          <Button
+                            variant="ghost"
+                            className="cc-line-remove"
+                            onClick={() => removeLine(index)}
+                            aria-label="Remove line"
+                          >
+                            <X size={15} />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </>
+              ) : (
+                <>
+                  <div className="cc-line-item-row" style={{ fontSize: 11.5, color: "var(--text-soft)", fontWeight: 600 }}>
+                    {LINE_COLUMNS.map((c) => (
+                      <span key={c.key}>{c.label}</span>
+                    ))}
+                    <span></span>
+                  </div>
+                  {lines.map((line, index) => (
+                    <div className="cc-line-item-row" key={index}>
+                      {LINE_COLUMNS.map((c) => (
                         <input
                           key={c.key}
                           className="cc-line-input"
                           value={line[c.key]}
                           onChange={(e) => updateLine(index, c.key, e.target.value)}
-                          readOnly={readOnly}
-                          title={readOnly ? "Recorded during repacking — not editable here." : undefined}
                         />
-                      );
-                    })}
-                    <Button variant="ghost" onClick={() => removeLine(index)} aria-label="Remove line">
-                      <X size={15} />
-                    </Button>
-                  </div>
-                );
-              })}
-              <Button size="sm" onClick={addLine} style={{ marginBottom: 16 }}>
-                <Plus size={14} /> Add item
-              </Button>
+                      ))}
+                      <Button variant="ghost" onClick={() => removeLine(index)} aria-label="Remove line">
+                        <X size={15} />
+                      </Button>
+                    </div>
+                  ))}
+                  <Button size="sm" onClick={addLine} style={{ marginBottom: 16 }}>
+                    <Plus size={14} /> Add item
+                  </Button>
+                </>
+              )}
 
               {mode === "ready" ? (
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
                   <Button onClick={saveItems} loading={saving}>
                     {!saving && <Save size={15} />} {saving ? "Saving…" : "Save"}
-                  </Button>
-                  <Button variant="primary" onClick={downloadList} loading={saving}>
-                    {!saving && <Download size={15} />} {saving ? "Saving…" : "Download ready-to-ship list"}
                   </Button>
                 </div>
               ) : (
@@ -346,6 +456,39 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
           <div className="cc-empty">Choose a booking above to build its packing list.</div>
         )}
       </div>
+
+      {mode === "ready" && (
+        <div className="cc-card" style={{ padding: 18, marginTop: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
+            <div>
+              <div className="cc-panel-title" style={{ marginBottom: 4 }}>
+                Added items
+              </div>
+              <div className="cc-panel-desc">
+                Items saved for the selected booking, across its bundles — pick a bundle, save, pick the next, and it builds up here.
+              </div>
+            </div>
+            <Button
+              variant="primary"
+              onClick={downloadAllBundles}
+              loading={saving}
+              disabled={!bookingId}
+              title={!bookingId ? "Choose a booking above first" : "Download every saved bundle for this booking"}
+            >
+              {!saving && <Download size={15} />} {saving ? "Saving…" : "Download ready-to-ship list"}
+            </Button>
+          </div>
+          {loadingAddedItems ? (
+            <SkeletonTable columns={SAVED_ITEM_COLUMNS.length} rows={4} />
+          ) : (
+            <DataTable
+              columns={SAVED_ITEM_COLUMNS}
+              rows={addedItems}
+              emptyText={bookingId ? "Nothing saved yet — save a packing list above." : "Choose a booking above to see its added items here."}
+            />
+          )}
+        </div>
+      )}
 
       {mode === "ready" && (
         <div className="cc-card" style={{ padding: 18, marginTop: 16 }}>

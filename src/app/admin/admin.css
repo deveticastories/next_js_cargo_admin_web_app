@@ -717,6 +717,56 @@ table.cc-table tr:hover td {
 .cc-line-input[readonly]:focus {
   border-color: var(--border);
 }
+/* Ready-to-ship's two-row-per-item layout: net/gross weight on top, product
+   fields below, each item boxed so the split reads as one unit. */
+.cc-line-item-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+.cc-line-item-weights {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed var(--border);
+}
+.cc-line-item-products {
+  display: grid;
+  grid-template-columns: 1.4fr 0.7fr 1fr 1.4fr auto;
+  gap: 8px;
+  align-items: center;
+}
+.cc-line-field label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-soft);
+  margin-bottom: 4px;
+}
+.cc-line-remove {
+  align-self: center;
+}
+/* Shared header above the product cards: column labels on the left, "Add item" on the right. */
+.cc-line-item-products-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  padding: 0 12px;
+}
+.cc-line-item-products-head-labels {
+  display: grid;
+  grid-template-columns: 1.4fr 0.7fr 1fr 1.4fr;
+  gap: 8px;
+  flex: 1;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-soft);
+}
 .cc-note-box {
   background: var(--info-bg);
   color: var(--info);
