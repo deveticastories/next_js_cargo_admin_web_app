@@ -65,10 +65,10 @@ const LINE_COLUMNS: { key: keyof BundleLineItem; label: string }[] = [
   { key: "description", label: "Description" },
 ];
 
-// Net/gross weight are recorded during repacking. In ready-to-ship, only the
-// default first row shows them (read-only, whatever repacking recorded) — a
-// row added afterward via "Add item" is a plain product line, with no
-// weight boxes at all.
+// Net/gross weight are recorded during repacking and carried into
+// ready-to-ship as a starting point, but editable there too. In ready-to-ship,
+// only the default first row shows them — a row added afterward via
+// "Add item" is a plain product line, with no weight boxes at all.
 const WEIGHT_FIELDS = new Set<keyof BundleLineItem>(["netWeight", "grossWeight"]);
 const WEIGHT_COLUMNS = LINE_COLUMNS.filter((c) => WEIGHT_FIELDS.has(c.key));
 const PRODUCT_COLUMNS = LINE_COLUMNS.filter((c) => !WEIGHT_FIELDS.has(c.key));
@@ -343,16 +343,12 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
               <div className="cc-mini-label">Packing list</div>
               {mode === "ready" ? (
                 // Ready-to-ship lays each item out as two rows: net/gross weight on top
-                // (read-only, whatever repacking recorded — default first row only) and
-                // the product fields below. The product columns get one shared header,
-                // with "Add item" sitting on its right instead of a full-width button.
+                // (carried over from repacking as a starting point, but editable here too —
+                // default first row only) and the product fields below. The product columns
+                // get one shared header, with "Add item" sitting on its right instead of a
+                // full-width button.
                 <>
                   <div className="cc-line-item-products-head">
-                    <div className="cc-line-item-products-head-labels">
-                      {PRODUCT_COLUMNS.map((c) => (
-                        <span key={c.key}>{c.label}</span>
-                      ))}
-                    </div>
                     <Button size="sm" onClick={addLine}>
                       <Plus size={14} /> Add item
                     </Button>
@@ -369,8 +365,7 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
                                 <input
                                   className="cc-line-input"
                                   value={line[c.key]}
-                                  readOnly
-                                  title="Recorded during repacking — not editable here."
+                                  onChange={(e) => updateLine(index, c.key, e.target.value)}
                                 />
                               </div>
                             ))}
@@ -378,12 +373,14 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
                         )}
                         <div className="cc-line-item-products">
                           {PRODUCT_COLUMNS.map((c) => (
-                            <input
-                              key={c.key}
-                              className="cc-line-input"
-                              value={line[c.key]}
-                              onChange={(e) => updateLine(index, c.key, e.target.value)}
-                            />
+                            <div className="cc-line-field" key={c.key}>
+                              <label>{c.label}</label>
+                              <input
+                                className="cc-line-input"
+                                value={line[c.key]}
+                                onChange={(e) => updateLine(index, c.key, e.target.value)}
+                              />
+                            </div>
                           ))}
                           <Button
                             variant="ghost"
