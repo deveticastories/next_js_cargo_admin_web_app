@@ -142,6 +142,8 @@ export function BookingScreen() {
               { key: "receiver", label: "Receiver" },
               { key: "date", label: "Date", render: (r) => fmtDate(r.date) },
               { key: "bundleCount", label: "Bundles" },
+              // Set by the Repacking screen's "Confirm" action, not the booking form — 0/"—" until repacking's been confirmed once.
+              { key: "actualBundle", label: "Actual bundle", render: (r) => (r.actualBundle ? r.actualBundle : "—") },
               { key: "bundleType", label: "Bundle type" },
               { key: "productType", label: "Product type" },
               { key: "billOption", label: "Bill", render: (r) => <Badge value={r.billOption} /> },

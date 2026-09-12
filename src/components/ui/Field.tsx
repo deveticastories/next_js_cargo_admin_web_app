@@ -19,6 +19,7 @@ export function Field({ field, value, onChange, error }: FieldProps) {
     value: stringValue,
     onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
       onChange(field.key, e.target.value),
+    disabled: field.disabled,
   };
 
   return (

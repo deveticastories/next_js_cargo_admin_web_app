@@ -79,11 +79,33 @@ export interface BundleWorkspaceProps {
 }
 
 export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
-  const eligible = bookings.items.filter(
-    (b) => b.repackingStatus === (mode === "ready" ? "Ready to Ship" : "Repacking Required")
+  // The Booking ID dropdown's options — repack mode also excludes bookings already
+  // repacked (Confirm has set `actualBundle` at least once). "Complete repacking, move
+  // to ready to ship" is currently commented out, so `repackingStatus` alone never flips
+  // to "Ready to Ship" from this screen and can't be relied on by itself to tell "still
+  // needs repacking" from "already repacked".
+  const eligible = bookings.items.filter((b) =>
+    mode === "ready" ? b.repackingStatus === "Ready to Ship" : b.repackingStatus === "Repacking Required" && !b.actualBundle
+  );
+  // "Saved bundle list" / "Saved packing lists" scope — deliberately broader than
+  // `eligible` above: it must still show a booking's saved bundles after that booking
+  // becomes "already repacked" and drops out of the dropdown, not just before.
+  const savedListBookings = bookings.items.filter((b) =>
+    b.repackingStatus === (mode === "ready" ? "Ready to Ship" : "Repacking Required")
   );
   const [bookingId, setBookingId] = useState("");
   const [bundle, setBundle] = useState("1");
+  // Repack mode only: the bundle number typed into "Actual bundle" before
+  // "Create Bundle" is clicked to make it the active one.
+  const [bundleInput, setBundleInput] = useState("1");
+  // Repack mode only: bundles "Save" has added to the "Added bundles" list for
+  // review, but hasn't yet written to the database — "Confirm" there is what
+  // actually persists them (see `confirmBundles`).
+  const [stagedBundles, setStagedBundles] = useState<{ bundleNumber: number; items: BundleLineItem[] }[]>([]);
+  // Repack mode only: whether the Packing list fields are showing. Save hides
+  // them (that bundle is done); Create Bundle shows them again, blank, for
+  // the next one — so there's never a stray empty form sitting open.
+  const [packingListVisible, setPackingListVisible] = useState(true);
   const [lines, setLines] = useState<BundleLineItem[]>([emptyLine()]);
   const [afterCount, setAfterCount] = useState("");
   const [repackedBy, setRepackedBy] = useState("");
@@ -98,19 +120,22 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
 
   const booking = bookings.items.find((b) => b.id === bookingId);
 
-  /** Every saved packing-list item across every Ready-to-ship booking, flattened into table rows. */
+  /**
+   * Every saved packing-list item across every booking eligible for the
+   * current mode, flattened into table rows — the actual "get all saved
+   * bundles" call (no bookingId filter), feeding "Saved bundle list" (repack)
+   * / "Saved packing lists" (ready).
+   */
   const loadSavedRows = async () => {
     setLoadingSavedRows(true);
     try {
       const lists = await api.get<{ id: string; booking: string; bundleNumber: number; items: BundleLineItem[] }[]>(
         "/packing-lists"
       );
-      const readyBookings = new Map(
-        bookings.items.filter((b) => b.repackingStatus === "Ready to Ship").map((b) => [b.id, b])
-      );
+      const scopedBookings = new Map(savedListBookings.map((b) => [b.id, b]));
       const rows: SavedItemRow[] = [];
       for (const list of lists) {
-        const forBooking = readyBookings.get(list.booking);
+        const forBooking = scopedBookings.get(list.booking);
         if (!forBooking) continue;
         list.items.forEach((item, index) => {
           // Skip a still-blank default row — nothing's actually been recorded for it yet.
@@ -127,7 +152,6 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
   };
 
   useEffect(() => {
-    if (mode !== "ready") return;
     // Deferred a tick so the fetch's setState calls land in their own microtask rather than
     // synchronously inside the effect body (same pattern as `useApiCollection`).
     // Depends on `bookings.items`, not just `mode`: on first mount `CargoDataProvider`'s own
@@ -144,10 +168,12 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
   }, [mode, bookings.items]);
 
   /**
-   * Every saved packing-list item for one booking, across all of its saved
-   * bundles, flattened into table rows — scoped to whichever booking is
-   * currently selected. Feeds the "Added items" table, not "Saved packing
-   * lists" (which stays a global view across every Ready-to-ship booking).
+   * Every saved (database-confirmed) packing-list item for one booking,
+   * across all of its saved bundles, flattened into table rows — scoped to
+   * whichever booking is currently selected. Feeds "Saved bundle list"
+   * (repack) / "Added items" (ready), not "Added bundles" (repack's own
+   * this-session staging table) or "Saved packing lists" (a global view
+   * across every Ready-to-ship booking).
    */
   const loadAddedItems = async (id: string) => {
     if (!id) {
@@ -192,25 +218,52 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
 
   const selectBooking = async (id: string) => {
     setBookingId(id);
-    setBundle("1");
     setError("");
     setSavedMessage("");
     // Clear the Added items table right away — it reloads scoped to the newly
     // selected booking below, instead of lingering with the previous booking's rows.
     setAddedItems([]);
+    // Unconfirmed bundles are scoped to whichever booking was open — starting fresh
+    // matches "Added bundles" starting out empty for a newly selected booking.
+    setStagedBundles([]);
+    // The first bundle is shown right away, same as always — only a Save (not
+    // selecting a booking) hides the Packing list fields.
+    setPackingListVisible(true);
     const b = bookings.items.find((x) => x.id === id);
-    setAfterCount(b ? String(b.bundleCount) : "");
-    if (id) {
-      await loadLines(id, "1");
+    // "Actual bundle" (repack mode) starts out at the bundle count entered when the
+    // booking was made, instead of always "1". "Bundle count" always starts at "1"
+    // regardless, and is independently editable from there.
+    const initialBundle = b ? String(b.bundleCount || 1) : "1";
+    setBundle(initialBundle);
+    setBundleInput(initialBundle);
+    setAfterCount("1");
+    // Packing list starts empty on selecting a booking, even if that bundle number
+    // already has saved items — "Create Bundle" is what loads an existing bundle's list.
+    setLines([emptyLine()]);
+    // "Added bundles" itself stays a this-session staging area (starts empty,
+    // above). "Added items" (ready mode only) is scoped to this booking; repack's
+    // "Saved bundle list" is the global `loadSavedRows` view instead, unaffected here.
+    if (id && mode === "ready") {
       await loadAddedItems(id);
-    } else {
-      setLines([emptyLine()]);
     }
   };
   const selectBundle = async (n: string) => {
     setBundle(n);
     setSavedMessage("");
     await loadLines(bookingId, n);
+  };
+
+  /**
+   * Repack mode's "Create Bundle" button — makes the typed bundle number the
+   * active one and bumps "Bundle count" by 1 (it starts at 1 for the bundle
+   * already active from selecting the booking, so the first Create Bundle
+   * click takes it to 2, the next to 3, and so on).
+   */
+  const createBundle = async () => {
+    if (!bookingId || !bundleInput) return;
+    await selectBundle(bundleInput);
+    setAfterCount((prev) => String(Number(prev || 0) + 1));
+    setPackingListVisible(true);
   };
 
   const updateLine = (index: number, key: keyof BundleLineItem, val: string) => {
@@ -228,8 +281,46 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
 
   const persistLines = () => api.post("/packing-lists", { bookingId, bundleNumber: Number(bundle), items: lines });
 
-  /** The Ready to ship screen's explicit "Save" button — persists without downloading. */
+  /** Writes each given bundle to the database (used by both "Confirm" and "Complete repacking"). */
+  const persistStagedBundles = async (bundlesToSave: { bundleNumber: number; items: BundleLineItem[] }[]) => {
+    for (const b of bundlesToSave) {
+      await api.post("/packing-lists", { bookingId, bundleNumber: b.bundleNumber, items: b.items });
+    }
+  };
+
+  /**
+   * The "Save" button. In ready mode it persists the active bundle's packing
+   * list directly, same as always. In repack mode it does NOT write to the
+   * database — it only adds/updates the active bundle in "Added bundles"
+   * below (for review) and clears the Packing list fields for the next one.
+   * "Confirm" in that panel is what actually saves repack bundles.
+   */
   const saveItems = async () => {
+    if (mode === "repack") {
+      const bundleNumber = Number(bundle);
+      setStagedBundles((prev) =>
+        [...prev.filter((b) => b.bundleNumber !== bundleNumber), { bundleNumber, items: lines }].sort(
+          (a, b) => a.bundleNumber - b.bundleNumber
+        )
+      );
+      setError("");
+      setSavedMessage(`Added Bundle ${bundle} to the list below — click Confirm to save it.`);
+      setLines([emptyLine()]);
+      // Hide the Packing list fields — that bundle is done. "Create Bundle"
+      // (below) brings them back, blank, for the next one.
+      setPackingListVisible(false);
+      // Advance both the active bundle and "Actual bundle" to the next number.
+      // Bug this fixes: only `bundleInput` (the visible field) used to advance,
+      // while `bundle` (what Save actually tags the staged entry with) stayed
+      // put — so filling the blank form and clicking Save again, without an
+      // explicit Create Bundle click, silently overwrote the same bundle
+      // instead of creating the next one, even though the field showed the
+      // next number.
+      const nextBundle = String(bundleNumber + 1);
+      setBundle(nextBundle);
+      setBundleInput(nextBundle);
+      return;
+    }
     setSaving(true);
     setError("");
     setSavedMessage("");
@@ -239,6 +330,37 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
       await Promise.all([loadSavedRows(), loadAddedItems(bookingId)]);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to save the packing list.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /**
+   * "Added bundles" panel's "Confirm" button (repack mode) — writes every
+   * staged bundle's packing list to the database, updates the booking's own
+   * `bundleCount` and `actualBundle` to match however many the user actually
+   * created (not whatever "Bundle count" happens to say) — `actualBundle` is
+   * what the Bookings table shows, `bundleCount` is also kept in sync since
+   * Ready to ship's own bundle picker still reads it — then refreshes "Saved
+   * bundle list" below from the server so the just-confirmed bundles show up.
+   */
+  const confirmBundles = async () => {
+    if (!bookingId || stagedBundles.length === 0) return;
+    setSaving(true);
+    setError("");
+    setSavedMessage("");
+    try {
+      const confirmedCount = stagedBundles.length;
+      await persistStagedBundles(stagedBundles);
+      await bookings.update(bookingId, { bundleCount: confirmedCount, actualBundle: confirmedCount });
+      setAfterCount(String(confirmedCount));
+      setSavedMessage(`Confirmed and saved ${confirmedCount} bundle${confirmedCount === 1 ? "" : "s"}.`);
+      // "Added bundles" is a staging area, not a saved-history view — it empties
+      // out once confirmed, same as it started empty for this booking.
+      setStagedBundles([]);
+      await loadSavedRows();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to save the bundles.");
     } finally {
       setSaving(false);
     }
@@ -280,6 +402,8 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
     }
   };
 
+  // Its button is commented out below (per request) — kept here for when it comes back.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const completeRepacking = async () => {
     if (!afterCount || !repackedBy) {
       alert("Enter the bundle count after repacking and who repacked it.");
@@ -288,7 +412,15 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
     setSaving(true);
     setError("");
     try {
-      await persistLines();
+      // Persist every staged bundle plus whatever's currently open (in case it
+      // wasn't explicitly saved yet) — Complete repacking shouldn't leave any
+      // reviewed-but-unconfirmed bundle behind.
+      const bundleNumber = Number(bundle);
+      await persistStagedBundles([
+        ...stagedBundles.filter((b) => b.bundleNumber !== bundleNumber),
+        { bundleNumber, items: lines },
+      ]);
+      setStagedBundles([]);
       await bookings.update(bookingId, { repackingStatus: "Ready to Ship", bundleCount: Number(afterCount) });
       setBookingId("");
       setBundle("1");
@@ -305,6 +437,25 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
   const bundleCountOf = booking ? Number(booking.bundleCount || 1) : 0;
   const bundleOptions = Array.from({ length: bundleCountOf || 1 }, (_, i) => String(i + 1));
 
+  /**
+   * Repack mode's "Added bundles" rows — a this-session staging area only, not
+   * a saved-history view: purely what's in `stagedBundles`, nothing fetched
+   * server-side. Starts empty for a newly selected booking and empties again
+   * once Confirm writes it to the database.
+   */
+  const stagedRows: SavedItemRow[] = stagedBundles
+    .flatMap((b) =>
+      b.items
+        .filter((item) => item.product || item.qty || item.fabric || item.description)
+        .map((item, index) => ({
+          id: `staged-${b.bundleNumber}-${index}`,
+          bookingCode: booking?.code ?? bookingId,
+          bundleNumber: b.bundleNumber,
+          ...item,
+        }))
+    )
+    .sort((a, b) => a.bundleNumber - b.bundleNumber);
+
   return (
     <>
       <div className="cc-card" style={{ padding: 18 }}>
@@ -320,16 +471,35 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
               ))}
             </select>
           </div>
-          <div className="cc-field">
-            <label>Bundle</label>
-            <select value={bundle} onChange={(e) => selectBundle(e.target.value)} disabled={!bookingId}>
-              {bundleOptions.map((n) => (
-                <option key={n} value={n}>
-                  Bundle {n}
-                </option>
-              ))}
-            </select>
-          </div>
+          {mode === "repack" ? (
+            <div className="cc-field">
+              <label>Actual bundle</label>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  type="number"
+                  min="1"
+                  value={bundleInput}
+                  onChange={(e) => setBundleInput(e.target.value)}
+                  placeholder="Enter bundle number"
+                  style={{ flex: 1 }}
+                />
+                <Button size="sm" onClick={createBundle} disabled={!bookingId || !bundleInput}>
+                  <Plus size={14} /> Create Bundle
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="cc-field">
+              <label>Bundle</label>
+              <select value={bundle} onChange={(e) => selectBundle(e.target.value)} disabled={!bookingId}>
+                {bundleOptions.map((n) => (
+                  <option key={n} value={n}>
+                    Bundle {n}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         {error && <div className="cc-alert-error" style={{ marginBottom: 12 }}>{error}</div>}
@@ -340,14 +510,12 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
             <SkeletonTable columns={LINE_COLUMNS.length + 1} rows={3} />
           ) : (
             <>
-              <div className="cc-mini-label">Packing list</div>
-              {mode === "ready" ? (
-                // Ready-to-ship lays each item out as two rows: net/gross weight on top
-                // (carried over from repacking as a starting point, but editable here too —
-                // default first row only) and the product fields below. The product columns
-                // get one shared header, with "Add item" sitting on its right instead of a
-                // full-width button.
+              {mode === "ready" || packingListVisible ? (
                 <>
+                  <div className="cc-mini-label">Packing list</div>
+                  {/* Same layout in both modes: net/gross weight on top (default first row
+                      only) and the product fields below. The product columns get one shared
+                      header, with "Add item" sitting on its right instead of a full-width button. */}
                   <div className="cc-line-item-products-head">
                     <Button size="sm" onClick={addLine}>
                       <Plus size={14} /> Add item
@@ -394,57 +562,36 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
                       </div>
                     );
                   })}
+
+                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                    <Button onClick={saveItems} loading={saving}>
+                      {!saving && <Save size={15} />} {saving ? "Saving…" : "Save"}
+                    </Button>
+                  </div>
                 </>
               ) : (
-                <>
-                  <div className="cc-line-item-row" style={{ fontSize: 11.5, color: "var(--text-soft)", fontWeight: 600 }}>
-                    {LINE_COLUMNS.map((c) => (
-                      <span key={c.key}>{c.label}</span>
-                    ))}
-                    <span></span>
-                  </div>
-                  {lines.map((line, index) => (
-                    <div className="cc-line-item-row" key={index}>
-                      {LINE_COLUMNS.map((c) => (
-                        <input
-                          key={c.key}
-                          className="cc-line-input"
-                          value={line[c.key]}
-                          onChange={(e) => updateLine(index, c.key, e.target.value)}
-                        />
-                      ))}
-                      <Button variant="ghost" onClick={() => removeLine(index)} aria-label="Remove line">
-                        <X size={15} />
-                      </Button>
-                    </div>
-                  ))}
-                  <Button size="sm" onClick={addLine} style={{ marginBottom: 16 }}>
-                    <Plus size={14} /> Add item
-                  </Button>
-                </>
+                // Repack mode, right after a Save — that bundle's fields are done with,
+                // so they stay out of the way until Create Bundle brings them back blank.
+                <div className="cc-empty">Bundle {bundle} saved to the list below. Click Create Bundle above to start the next one.</div>
               )}
 
-              {mode === "ready" ? (
-                <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                  <Button onClick={saveItems} loading={saving}>
-                    {!saving && <Save size={15} />} {saving ? "Saving…" : "Save"}
-                  </Button>
-                </div>
-              ) : (
+              {mode === "repack" && (
                 <>
-                  <div className="cc-grid-2" style={{ marginTop: 6 }}>
+                  <div className="cc-grid-2" style={{ marginTop: 12 }}>
                     <Field
-                      field={{ key: "afterCount", label: "Bundle count after repacking", type: "number" }}
+                      field={{ key: "afterCount", label: "Bundle count", type: "number", disabled: true }}
                       value={afterCount}
                       onChange={(_, v) => setAfterCount(v)}
                     />
                     <Field field={{ key: "repackedBy", label: "Repacked by" }} value={repackedBy} onChange={(_, v) => setRepackedBy(v)} />
                   </div>
+                  {/* Commented out per request — button hidden, `completeRepacking` kept for when it comes back.
                   <div style={{ display: "flex", justifyContent: "flex-end" }}>
                     <Button variant="primary" onClick={completeRepacking} loading={saving}>
                       {!saving && <CheckCircle2 size={15} />} {saving ? "Saving…" : "Complete repacking, move to ready to ship"}
                     </Button>
                   </div>
+                  */}
                 </>
               )}
             </>
@@ -454,17 +601,19 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
         )}
       </div>
 
-      {mode === "ready" && (
-        <div className="cc-card" style={{ padding: 18, marginTop: 16 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
-            <div>
-              <div className="cc-panel-title" style={{ marginBottom: 4 }}>
-                Added items
-              </div>
-              <div className="cc-panel-desc">
-                Items saved for the selected booking, across its bundles — pick a bundle, save, pick the next, and it builds up here.
-              </div>
+      <div className="cc-card" style={{ padding: 18, marginTop: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
+          <div>
+            <div className="cc-panel-title" style={{ marginBottom: 4 }}>
+              {mode === "repack" ? "Added bundles" : "Added items"}
             </div>
+            <div className="cc-panel-desc">
+              {mode === "repack"
+                ? "For your review — Save above adds a bundle here, but nothing reaches the database until you click Confirm."
+                : "Items saved for the selected booking, across its bundles — pick a bundle, save, pick the next, and it builds up here."}
+            </div>
+          </div>
+          {mode === "ready" ? (
             <Button
               variant="primary"
               onClick={downloadAllBundles}
@@ -474,34 +623,54 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
             >
               {!saving && <Download size={15} />} {saving ? "Saving…" : "Download ready-to-ship list"}
             </Button>
-          </div>
-          {loadingAddedItems ? (
-            <SkeletonTable columns={SAVED_ITEM_COLUMNS.length} rows={4} />
           ) : (
-            <DataTable
-              columns={SAVED_ITEM_COLUMNS}
-              rows={addedItems}
-              emptyText={bookingId ? "Nothing saved yet — save a packing list above." : "Choose a booking above to see its added items here."}
-            />
+            <Button
+              variant="primary"
+              onClick={confirmBundles}
+              loading={saving}
+              disabled={!bookingId || stagedBundles.length === 0}
+              title={stagedBundles.length === 0 ? "Save a bundle above first" : "Save every listed bundle to the database"}
+            >
+              {!saving && <CheckCircle2 size={15} />} {saving ? "Saving…" : "Confirm"}
+            </Button>
           )}
         </div>
-      )}
+        {mode === "repack" ? (
+          // Local staging data — no fetch involved, so no loading skeleton needed.
+          <DataTable
+            columns={SAVED_ITEM_COLUMNS}
+            rows={stagedRows}
+            emptyText={bookingId ? "Nothing added yet — save a bundle above." : "Choose a booking above to see its added items here."}
+          />
+        ) : loadingAddedItems ? (
+          <SkeletonTable columns={SAVED_ITEM_COLUMNS.length} rows={4} />
+        ) : (
+          <DataTable
+            columns={SAVED_ITEM_COLUMNS}
+            rows={addedItems}
+            emptyText={bookingId ? "Nothing saved yet — save a packing list above." : "Choose a booking above to see its added items here."}
+          />
+        )}
+      </div>
 
-      {mode === "ready" && (
-        <div className="cc-card" style={{ padding: 18, marginTop: 16 }}>
-          <div className="cc-panel-title" style={{ marginBottom: 4 }}>
-            Saved packing lists
-          </div>
-          <div className="cc-panel-desc" style={{ marginBottom: 14 }}>
-            Every item saved so far, across every Ready-to-ship booking.
-          </div>
-          {loadingSavedRows ? (
-            <SkeletonTable columns={SAVED_ITEM_COLUMNS.length} rows={4} />
-          ) : (
-            <DataTable columns={SAVED_ITEM_COLUMNS} rows={savedRows} emptyText="Nothing saved yet — save or download a packing list above." />
-          )}
+      <div className="cc-card" style={{ padding: 18, marginTop: 16 }}>
+        <div className="cc-panel-title" style={{ marginBottom: 4 }}>
+          {mode === "repack" ? "Saved bundle list" : "Saved packing lists"}
         </div>
-      )}
+        <div className="cc-panel-desc" style={{ marginBottom: 14 }}>
+          Every bundle actually saved to the database so far, across every {mode === "repack" ? "Repacking-required" : "Ready-to-ship"} booking
+          — fetched fresh from the server, not just this session&apos;s view.
+        </div>
+        {loadingSavedRows ? (
+          <SkeletonTable columns={SAVED_ITEM_COLUMNS.length} rows={4} />
+        ) : (
+          <DataTable
+            columns={SAVED_ITEM_COLUMNS}
+            rows={savedRows}
+            emptyText={mode === "repack" ? "Nothing confirmed yet — click Confirm above." : "Nothing saved yet — save or download a packing list above."}
+          />
+        )}
+      </div>
     </>
   );
 }

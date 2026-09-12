@@ -104,6 +104,14 @@ export interface Booking extends BaseRecord {
   pickupCharge: number;
   /** Only meaningful when `bundleCount` is below 5 — 0 otherwise. */
   bundleHandlingCharge: number;
+  /**
+   * The real bundle count determined during repacking — set by the
+   * Repacking screen's "Confirm" action (how many bundles were actually
+   * created there), not editable from the booking form. 0 until repacking
+   * has been confirmed at least once. Distinct from `bundleCount`, which is
+   * whatever was entered when the booking was first made.
+   */
+  actualBundle: number;
 }
 
 export interface Container extends BaseRecord {
@@ -185,6 +193,8 @@ export interface FieldConfig {
   options?: string[];
   required?: boolean;
   placeholder?: string;
+  /** Renders the input read-only — for a value the form computes rather than the user types. */
+  disabled?: boolean;
 }
 
 export interface ColumnConfig<T> {

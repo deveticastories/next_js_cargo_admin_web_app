@@ -29,6 +29,9 @@ const bookingSchema = new Schema(
     brandHandlingCharge: { type: Number, default: 0, min: 0 },
     pickupCharge: { type: Number, default: 0, min: 0 },
     bundleHandlingCharge: { type: Number, default: 0, min: 0 },
+    // Set by the Repacking screen's "Confirm" action (how many bundles were
+    // actually created), not by the booking form — see `Booking` in src/types.
+    actualBundle: { type: Number, default: 0, min: 0 },
   },
   baseSchemaOptions
 );
