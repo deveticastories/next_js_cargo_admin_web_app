@@ -102,9 +102,13 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
   // review, but hasn't yet written to the database — "Confirm" there is what
   // actually persists them (see `confirmBundles`).
   const [stagedBundles, setStagedBundles] = useState<{ bundleNumber: number; items: BundleLineItem[] }[]>([]);
-  // Repack mode only: whether the Packing list fields are showing. Save hides
-  // them (that bundle is done); Create Bundle shows them again, blank, for
-  // the next one — so there's never a stray empty form sitting open.
+  // Repack mode only: whether the Packing list fields are showing. Hidden
+  // until Create Bundle is clicked (selecting a booking alone no longer
+  // reveals it), and hidden again after Save (that bundle is done); Create
+  // Bundle shows it again, blank, for the next one — so there's never a
+  // stray empty form sitting open. Also doubles as the Create Bundle
+  // button's own disabled state — it stays disabled while a bundle's
+  // packing list is open, re-enabling only once Save closes it.
   const [packingListVisible, setPackingListVisible] = useState(true);
   const [lines, setLines] = useState<BundleLineItem[]>([emptyLine()]);
   const [afterCount, setAfterCount] = useState("");
@@ -226,17 +230,21 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
     // Unconfirmed bundles are scoped to whichever booking was open — starting fresh
     // matches "Added bundles" starting out empty for a newly selected booking.
     setStagedBundles([]);
-    // The first bundle is shown right away, same as always — only a Save (not
-    // selecting a booking) hides the Packing list fields.
-    setPackingListVisible(true);
+    // Repack mode: the Packing list fields stay hidden until Create Bundle is
+    // clicked. Ready mode ignores this flag (its list always renders), so
+    // leaving it true there changes nothing.
+    setPackingListVisible(mode !== "repack");
     const b = bookings.items.find((x) => x.id === id);
     // "Actual bundle" (repack mode) starts out at the bundle count entered when the
-    // booking was made, instead of always "1". "Bundle count" always starts at "1"
-    // regardless, and is independently editable from there.
+    // booking was made, instead of always "1".
     const initialBundle = b ? String(b.bundleCount || 1) : "1";
     setBundle(initialBundle);
     setBundleInput(initialBundle);
-    setAfterCount("1");
+    // "Bundle count" starts at 0 — no bundle has actually been created yet (the
+    // packing list itself is still hidden until Create Bundle is clicked). Each
+    // Create Bundle click below bumps it by 1, so it reads 1 after the first
+    // click, 2 after the second, and so on.
+    setAfterCount("0");
     // Packing list starts empty on selecting a booking, even if that bundle number
     // already has saved items — "Create Bundle" is what loads an existing bundle's list.
     setLines([emptyLine()]);
@@ -255,9 +263,9 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
 
   /**
    * Repack mode's "Create Bundle" button — makes the typed bundle number the
-   * active one and bumps "Bundle count" by 1 (it starts at 1 for the bundle
-   * already active from selecting the booking, so the first Create Bundle
-   * click takes it to 2, the next to 3, and so on).
+   * active one and bumps "Bundle count" by 1 ("Bundle count" starts at 0 on
+   * selecting a booking, so the first Create Bundle click takes it to 1, the
+   * next to 2, and so on).
    */
   const createBundle = async () => {
     if (!bookingId || !bundleInput) return;
@@ -475,15 +483,16 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
             <div className="cc-field">
               <label>Actual bundle</label>
               <div style={{ display: "flex", gap: 8 }}>
-                <input
-                  type="number"
-                  min="1"
-                  value={bundleInput}
-                  onChange={(e) => setBundleInput(e.target.value)}
-                  placeholder="Enter bundle number"
-                  style={{ flex: 1 }}
-                />
-                <Button size="sm" onClick={createBundle} disabled={!bookingId || !bundleInput}>
+                {/* Display-only — the bundle number itself advances automatically
+                    (selecting a booking, then each Save), Create Bundle just opens
+                    whatever count is currently shown here. */}
+                <input type="number" min="1" value={bundleInput} disabled style={{ flex: 1 }} />
+                <Button
+                  size="sm"
+                  onClick={createBundle}
+                  disabled={!bookingId || !bundleInput || packingListVisible}
+                  title={packingListVisible ? "Save the open packing list before creating the next bundle" : undefined}
+                >
                   <Plus size={14} /> Create Bundle
                 </Button>
               </div>
@@ -514,13 +523,8 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
                 <>
                   <div className="cc-mini-label">Packing list</div>
                   {/* Same layout in both modes: net/gross weight on top (default first row
-                      only) and the product fields below. The product columns get one shared
-                      header, with "Add item" sitting on its right instead of a full-width button. */}
-                  <div className="cc-line-item-products-head">
-                    <Button size="sm" onClick={addLine}>
-                      <Plus size={14} /> Add item
-                    </Button>
-                  </div>
+                      only) and the product fields below. "Add item" now sits next to Save
+                      below, instead of in a header row above the list. */}
                   {lines.map((line, index) => {
                     const isDefaultRow = index === 0;
                     return (
@@ -563,16 +567,20 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
                     );
                   })}
 
-                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 20 }}>
+                    <Button size="sm" onClick={addLine}>
+                      <Plus size={14} /> Add item
+                    </Button>
                     <Button onClick={saveItems} loading={saving}>
                       {!saving && <Save size={15} />} {saving ? "Saving…" : "Save"}
                     </Button>
                   </div>
                 </>
               ) : (
-                // Repack mode, right after a Save — that bundle's fields are done with,
-                // so they stay out of the way until Create Bundle brings them back blank.
-                <div className="cc-empty">Bundle {bundle} saved to the list below. Click Create Bundle above to start the next one.</div>
+                // Repack mode, before the first Create Bundle click (or right after a Save,
+                // when that bundle's fields are done with) — stays out of the way until
+                // Create Bundle brings the (blank) packing list fields in.
+                <div className="cc-empty">Enter a bundle number and click Create Bundle above to open its packing list.</div>
               )}
 
               {mode === "repack" && (

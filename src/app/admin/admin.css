@@ -749,16 +749,6 @@ table.cc-table tr:hover td {
 .cc-line-remove {
   align-self: end;
 }
-/* Header above the product cards: just "Add item", right-aligned — each card carries its own
-   column labels now (see .cc-line-field), so no shared label row is needed here. */
-.cc-line-item-products-head {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  margin-bottom: 8px;
-  padding: 0 12px;
-}
 .cc-note-box {
   background: var(--info-bg);
   color: var(--info);
