@@ -10,7 +10,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   LayoutDashboard, Users, UsersRound, Warehouse, Truck, Bike, Tags,
-  ClipboardList, PackagePlus, PackageCheck, Boxes, Ship, ArrowRightLeft,
+  ClipboardList, CalendarPlus, PackagePlus, PackageCheck, Boxes, Ship, ArrowRightLeft,
   FileText, Wallet, Receipt, BarChart3,
 } from "lucide-react";
 
@@ -42,6 +42,7 @@ export const NAV: NavGroup[] = [
     group: "Operations",
     items: [
       { href: "/admin/pickup-assign", label: "Pickup assign", icon: ClipboardList },
+      { href: "/admin/pre-booking", label: "Pre-booking", icon: CalendarPlus },
       { href: "/admin/booking", label: "Booking", icon: PackagePlus },
       { href: "/admin/ready-to-ship", label: "Ready to ship", icon: PackageCheck },
       { href: "/admin/repacking", label: "Repacking", icon: Boxes },
@@ -79,6 +80,7 @@ export const PAGE_TITLES: Record<string, [string, string]> = {
   "/admin/pickup-partners": ["Pickup partners", "Third-party partners who collect bundles from senders"],
   "/admin/pricing": ["Pricing", "Route-wise price per unit of measure"],
   "/admin/pickup-assign": ["Pickup assign", "Assign a transport and LR number to a collection run"],
+  "/admin/pre-booking": ["Pre-booking", "Book a shipment in before the receiver is known"],
   "/admin/booking": ["Booking", "Create and track shipment bookings"],
   "/admin/ready-to-ship": ["Ready to ship", "Pack bundles and download the shipping list"],
   "/admin/repacking": ["Repacking", "Repack bundles before they move to ready to ship"],

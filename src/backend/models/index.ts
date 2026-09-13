@@ -7,6 +7,7 @@ export { PickupPartner } from "@/backend/models/PickupPartner";
 export { PricingRoute } from "@/backend/models/PricingRoute";
 export { PickupAssign } from "@/backend/models/PickupAssign";
 export { Booking } from "@/backend/models/Booking";
+export { PreBooking } from "@/backend/models/PreBooking";
 export { Container } from "@/backend/models/Container";
 export { DailyExpense } from "@/backend/models/DailyExpense";
 export { CreditNote } from "@/backend/models/CreditNote";

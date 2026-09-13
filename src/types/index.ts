@@ -114,6 +114,32 @@ export interface Booking extends BaseRecord {
   actualBundle: number;
 }
 
+/**
+ * A shipment booked in ahead of the full workflow — same as `Booking` except
+ * the receiver isn't known yet (no `receiver`) and a `phoneNumber` is
+ * captured instead so the sender can be reached.
+ */
+export interface PreBooking extends BaseRecord {
+  sender: string;
+  phoneNumber: string;
+  pickupOption: string;
+  date: string;
+  billOption: BillOption | "";
+  bundleCount: number;
+  bundleType: BundleType | "";
+  productType: ProductType | "";
+  repackingStatus: RepackingStatus | "";
+  stuffed: boolean;
+  /** Only meaningful when `productType` is "Branded" — 0 otherwise. */
+  brandHandlingCharge: number;
+  /** Only meaningful when `billOption` is "Without Bill" — 0 otherwise. */
+  pickupCharge: number;
+  /** Only meaningful when `bundleCount` is below 5 — 0 otherwise. */
+  bundleHandlingCharge: number;
+  /** Set by the Repacking screen's "Confirm" action — not editable from the pre-booking form. */
+  actualBundle: number;
+}
+
 export interface Container extends BaseRecord {
   company: string;
   stuffingDate: string;
