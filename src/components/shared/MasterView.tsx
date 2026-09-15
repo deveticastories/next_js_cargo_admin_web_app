@@ -33,6 +33,10 @@ export interface MasterViewProps<T extends RecordWithId> {
   /** Set false for records with no Active/Inactive status (e.g. pricing, expenses). */
   hasStatus?: boolean;
   footer?: (rows: T[]) => ReactNode;
+  /** Opens the "new" modal as soon as this screen mounts — e.g. arriving here from another screen's "add new" shortcut. */
+  autoOpenNew?: boolean;
+  /** Pre-fills every "new" form — both a manual "+ New" click and an `autoOpenNew` arrival — e.g. sensible defaults for select fields, or a name typed elsewhere. */
+  initialNewValues?: Record<string, unknown>;
 }
 
 const STATUS_FIELD: FieldConfig = { key: "status", label: "Status", type: "select", options: ["Active", "Inactive"] };
@@ -49,11 +53,19 @@ export function MasterView<T extends RecordWithId>({
   collection,
   hasStatus = true,
   footer,
+  autoOpenNew = false,
+  initialNewValues,
 }: MasterViewProps<T>) {
   const { items: rows, loading, error: loadError, create, update, remove } = collection;
   const [query, setQuery] = useState("");
-  const [modalRow, setModalRow] = useState<string | "new" | null>(null);
-  const [form, setForm] = useState<Record<string, unknown>>({});
+  // Lazy initializers so an `autoOpenNew` arrival (e.g. from another screen's
+  // "add new" shortcut) opens the modal on the very first render, with no
+  // effect-driven setState needed.
+  const [modalRow, setModalRow] = useState<string | "new" | null>(() => (autoOpenNew ? "new" : null));
+  const [form, setForm] = useState<Record<string, unknown>>(() => ({
+    ...(hasStatus ? { status: "Active" as Status } : {}),
+    ...(autoOpenNew ? initialNewValues : undefined),
+  }));
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
   // Which row's delete/status-toggle request is currently in flight — DataTable dims that
@@ -66,8 +78,8 @@ export function MasterView<T extends RecordWithId>({
     return rows.filter((row) => Object.values(row).some((v) => String(v).toLowerCase().includes(q)));
   }, [rows, query]);
 
-  const openNew = () => {
-    setForm(hasStatus ? { status: "Active" as Status } : {});
+  const openNew = (values?: Record<string, unknown>) => {
+    setForm({ ...(hasStatus ? { status: "Active" as Status } : {}), ...values });
     setModalRow("new");
     setFormError("");
   };
@@ -160,7 +172,7 @@ export function MasterView<T extends RecordWithId>({
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <SearchBar value={query} onChange={setQuery} />
-          <Button variant="primary" onClick={openNew}>
+          <Button variant="primary" onClick={() => openNew(initialNewValues)}>
             <Plus size={15} /> New
           </Button>
         </div>

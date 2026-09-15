@@ -611,6 +611,94 @@ table.cc-table tr:hover td {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
+/** Searchable select — see ui/SearchableSelect.tsx (currently the Pre-booking Sender field). */
+.cc-searchselect {
+  position: relative;
+}
+.cc-searchselect-control {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 9px 12px;
+  font-size: 14px;
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.cc-searchselect-control:hover {
+  border-color: var(--accent);
+}
+.cc-searchselect-placeholder {
+  color: var(--text-faint);
+}
+.cc-searchselect-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cc-searchselect-input input {
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  width: 100%;
+  color: var(--text);
+  font-family: var(--font-body), sans-serif;
+}
+.cc-searchselect-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 28px oklch(0.24 0.02 155 / 0.16);
+  overflow: hidden;
+  animation: cc-scale-in 0.12s ease;
+}
+.cc-searchselect-list {
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 4px;
+}
+.cc-searchselect-option {
+  padding: 8px 10px;
+  border-radius: 7px;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+.cc-searchselect-option:hover {
+  background: var(--accent-soft);
+}
+.cc-searchselect-option.active {
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+  font-weight: 500;
+}
+.cc-searchselect-empty {
+  padding: 14px 10px;
+  font-size: 12.5px;
+  color: var(--text-faint);
+  text-align: center;
+}
+.cc-searchselect-create {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent);
+  border-top: 1px solid var(--border);
+  cursor: pointer;
+  background: oklch(0.98 0.01 155);
+}
+.cc-searchselect-create:hover {
+  background: var(--accent-soft);
+}
+
 .cc-error {
   font-size: 12px;
   color: var(--danger);

@@ -1,5 +1,10 @@
+import { Suspense } from "react";
 import { CustomersScreen } from "@/screens/CustomersScreen";
 
 export default function Page() {
-  return <CustomersScreen />;
+  return (
+    <Suspense>
+      <CustomersScreen />
+    </Suspense>
+  );
 }

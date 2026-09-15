@@ -7,6 +7,10 @@ const pickupAssignSchema = new Schema(
   {
     transport: { type: String, required: true, trim: true },
     lrNo: { type: String, required: true, unique: true, trim: true },
+    bundleCount: { type: Number, required: true, min: 1 },
+    amount: { type: Number, required: true, min: 0 },
+    paymentStatus: { type: String, enum: ["Unpaid", "Paid"], default: "Unpaid" },
+    pickupStatus: { type: String, enum: ["Pending", "Collected"], default: "Pending" },
     status: { type: String, enum: ["Active", "Inactive"], default: "Active" },
   },
   baseSchemaOptions

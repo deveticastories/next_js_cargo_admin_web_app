@@ -18,6 +18,14 @@ export type ProductType = "Branded" | "Normal";
 
 export type RepackingStatus = "Ready to Ship" | "Repacking Required";
 
+/** Pre-booking's own status flow — starts at "Pending" on creation, moves to "Collected" once the sender's goods are picked up. Distinct from the generic `Status` used elsewhere. */
+export type PreBookingStatus = "Pending" | "Collected";
+
+/** Pickup assign's collection status — starts at "Pending", moves to "Collected" once the transport has picked up. */
+export type PickupStatus = "Pending" | "Collected";
+
+export type PaymentStatus = "Unpaid" | "Paid";
+
 export type PaymentType = "Cash" | "UPI";
 
 export type EmployeeRole = "Admin" | "Employee";
@@ -85,6 +93,10 @@ export interface PricingRoute {
 export interface PickupAssign extends BaseRecord {
   transport: string;
   lrNo: string;
+  bundleCount: number;
+  amount: number;
+  paymentStatus: PaymentStatus | "";
+  pickupStatus: PickupStatus | "";
 }
 
 export interface Booking extends BaseRecord {
@@ -119,7 +131,7 @@ export interface Booking extends BaseRecord {
  * the receiver isn't known yet (no `receiver`) and a `phoneNumber` is
  * captured instead so the sender can be reached.
  */
-export interface PreBooking extends BaseRecord {
+export interface PreBooking extends Omit<BaseRecord, "status"> {
   sender: string;
   phoneNumber: string;
   pickupOption: string;
@@ -129,6 +141,8 @@ export interface PreBooking extends BaseRecord {
   bundleType: BundleType | "";
   productType: ProductType | "";
   repackingStatus: RepackingStatus | "";
+  /** Starts at "Pending" when the pre-booking is created; moves through Active/Inactive from there. */
+  status?: PreBookingStatus;
   stuffed: boolean;
   /** Only meaningful when `productType` is "Branded" — 0 otherwise. */
   brandHandlingCharge: number;

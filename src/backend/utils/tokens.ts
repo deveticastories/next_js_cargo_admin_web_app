@@ -13,8 +13,10 @@ export const REFRESH_TOKEN_COOKIE = "cargo_refresh_token";
 
 const ACCESS_TOKEN_TTL = "15m";
 export const ACCESS_TOKEN_MAX_AGE_SECONDS = 15 * 60;
-const REFRESH_TOKEN_TTL = "7d";
-export const REFRESH_TOKEN_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
+// How long a signed-in session lasts without re-entering a password — the access token above
+// is silently re-minted from this one (see `/api/auth/refresh`) for as long as it's still valid.
+const REFRESH_TOKEN_TTL = "30d";
+export const REFRESH_TOKEN_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 
 /** Which collection `sub` belongs to — `Admin` (the seeded super admin) or `Employee` (a Team member). */
 export type AccountKind = "admin" | "employee";

@@ -67,6 +67,8 @@ export const DEFAULT_STATUS_STYLE: StatusStyle = {
 
 /** Every known status/badge label mapped to its display colors. */
 export const STATUS_STYLES: Record<string, StatusStyle> = {
+  Pending: { bg: colors.warnBg, fg: colors.warn },
+  Collected: { bg: colors.successBg, fg: colors.success },
   Active: { bg: colors.successBg, fg: colors.success },
   Inactive: { bg: colors.dangerBg, fg: colors.danger },
   "Ready to Ship": { bg: colors.successBg, fg: colors.success },
@@ -74,4 +76,6 @@ export const STATUS_STYLES: Record<string, StatusStyle> = {
   Stuffed: { bg: colors.infoBg, fg: colors.info },
   "With Bill": { bg: colors.infoBg, fg: colors.info },
   "Without Bill": { bg: colors.warnBg, fg: colors.warn },
+  Paid: { bg: colors.successBg, fg: colors.success },
+  Unpaid: { bg: colors.dangerBg, fg: colors.danger },
 };

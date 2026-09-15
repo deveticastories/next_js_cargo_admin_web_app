@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useCargoData } from "@/components/providers/CargoDataProvider";
 import { MasterView } from "@/components/shared/MasterView";
 import { Button } from "@/components/ui/Button";
@@ -8,7 +9,12 @@ import { Button } from "@/components/ui/Button";
 /** Senders (who book shipments) and receivers (who collect them), as two tabs. */
 export function CustomersScreen() {
   const { senders, receivers } = useCargoData();
-  const [tab, setTab] = useState<"sender" | "receiver">("sender");
+  // Lets another screen (e.g. Pre-booking's Sender search) deep-link straight into
+  // "add a new sender" — ?tab=sender&newSender=1&senderName=<typed text>.
+  const searchParams = useSearchParams();
+  const [tab, setTab] = useState<"sender" | "receiver">(searchParams.get("tab") === "receiver" ? "receiver" : "sender");
+  const autoOpenNewSender = tab === "sender" && searchParams.get("newSender") === "1";
+  const prefillSenderName = searchParams.get("senderName") ?? "";
 
   return (
     <div>
@@ -36,6 +42,8 @@ export function CustomersScreen() {
             { key: "location", label: "Location" },
           ]}
           collection={senders}
+          autoOpenNew={autoOpenNewSender}
+          initialNewValues={prefillSenderName ? { name: prefillSenderName } : undefined}
         />
       ) : (
         <MasterView

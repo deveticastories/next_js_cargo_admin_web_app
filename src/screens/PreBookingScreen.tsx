@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { useCargoData } from "@/components/providers/CargoDataProvider";
 import { StatCard } from "@/components/ui/StatCard";
@@ -10,6 +11,7 @@ import { DataTable } from "@/components/ui/DataTable";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { Field } from "@/components/ui/Field";
+import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { ApiError } from "@/utils/apiClient";
 import { fmtDate, todayISO, toDateInputValue } from "@/utils/format";
@@ -21,7 +23,8 @@ import type { PreBooking } from "@/types";
  * sender can be reached). See `BookingScreen` for the full-booking version.
  */
 export function PreBookingScreen() {
-  const { preBookings, senders, pickupPartners } = useCargoData();
+  const router = useRouter();
+  const { preBookings, senders } = useCargoData();
   const [query, setQuery] = useState("");
   const [modalRow, setModalRow] = useState<string | "new" | null>(null);
   const [form, setForm] = useState<Record<string, unknown>>({});
@@ -29,11 +32,6 @@ export function PreBookingScreen() {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const pickupOptions = [
-    "Our Pickup Boy",
-    "Direct to Store",
-    ...pickupPartners.items.filter((p) => p.status === "Active").map((p) => p.name),
-  ];
   const filtered = preBookings.items.filter((b) =>
     Object.values(b).some((v) => String(v).toLowerCase().includes(query.toLowerCase()))
   );
@@ -51,11 +49,15 @@ export function PreBookingScreen() {
   const openNew = () => {
     setForm({
       date: todayISO(),
+      // "Pick up via", "Bill option" and "Product type" are no longer shown in this
+      // form (per request) but are still required by the backend record — fixed
+      // defaults instead of a user choice.
+      pickupOption: "Our Pickup Boy",
       billOption: "With Bill",
       bundleType: "Bundle",
       productType: "Normal",
       repackingStatus: "Repacking Required",
-      status: "Active",
+      status: "Pending",
     });
     setModalRow("new");
     setError("");
@@ -67,8 +69,8 @@ export function PreBookingScreen() {
   };
 
   const save = async () => {
-    if (!form.sender || !form.phoneNumber || !form.pickupOption || !form.bundleCount) {
-      setError("Sender, phone number, pickup option and bundle count are required.");
+    if (!form.sender || !form.phoneNumber || !form.bundleCount) {
+      setError("Sender, phone number and bundle count are required.");
       return;
     }
     // Each extra charge only applies under its own condition — zero it out
@@ -107,6 +109,20 @@ export function PreBookingScreen() {
   };
 
   const set = (k: string, v: string) => setForm({ ...form, [k]: v });
+  // Sender select's own onChange — also fills "Phone number" from that sender's
+  // saved WhatsApp number, so it doesn't have to be typed in again. Still a plain
+  // editable field afterward, in case this pre-booking needs a different contact.
+  const selectSender = (v: string) => {
+    const found = senders.items.find((s) => s.name === v);
+    setForm({ ...form, sender: v, phoneNumber: found?.whatsapp ?? "" });
+  };
+  // No matching sender in the dropdown — send the admin to Customers, sender
+  // tab, with its "Add" popup already open (and the typed name prefilled).
+  const addSenderFromSearch = (typedName: string) => {
+    const params = new URLSearchParams({ tab: "sender", newSender: "1" });
+    if (typedName) params.set("senderName", typedName);
+    router.push(`/admin/customers?${params.toString()}`);
+  };
 
   const showBrandHandlingCharge = form.productType === "Branded";
   const showPickupCharge = form.billOption === "Without Bill";
@@ -170,21 +186,25 @@ export function PreBookingScreen() {
           submitting={saving}
         >
           <div className="cc-grid-2">
-            <Field field={{ key: "sender", label: "Sender", type: "select", options: senders.items.map((s) => s.name) }} value={form.sender} onChange={set} />
+            <SearchableSelect
+              label="Sender"
+              required
+              value={(form.sender as string) ?? ""}
+              options={senders.items.map((s) => s.name)}
+              placeholder="Search sender"
+              onChange={selectSender}
+              onCreateNew={addSenderFromSearch}
+            />
             <Field field={{ key: "phoneNumber", label: "Phone number", type: "text", placeholder: "e.g. +971 50 123 4567" }} value={form.phoneNumber} onChange={set} />
           </div>
-          <Field field={{ key: "pickupOption", label: "Pick up via", type: "select", options: pickupOptions }} value={form.pickupOption} onChange={set} />
-          <div className="cc-grid-2">
-            <Field field={{ key: "date", label: "Booking date", type: "date" }} value={form.date} onChange={set} />
-            <Field field={{ key: "billOption", label: "Bill option", type: "select", options: ["With Bill", "Without Bill"] }} value={form.billOption} onChange={set} />
-          </div>
+          <Field field={{ key: "date", label: "Booking date", type: "date" }} value={form.date} onChange={set} />
           <div className="cc-grid-2">
             <Field field={{ key: "bundleCount", label: "Bundle count", type: "number" }} value={form.bundleCount} onChange={set} />
             <Field field={{ key: "bundleType", label: "Bundle type", type: "select", options: ["Bundle", "Box", "CBM", "KG"] }} value={form.bundleType} onChange={set} />
           </div>
           <div className="cc-grid-2">
-            <Field field={{ key: "productType", label: "Product type", type: "select", options: ["Branded", "Normal"] }} value={form.productType} onChange={set} />
             <Field field={{ key: "repackingStatus", label: "Pack status", type: "select", options: ["Ready to Ship", "Repacking Required"] }} value={form.repackingStatus} onChange={set} />
+            <Field field={{ key: "status", label: "Status", type: "select", options: ["Pending", "Collected"] }} value={form.status} onChange={set} />
           </div>
           {(showBrandHandlingCharge || showPickupCharge || showBundleHandlingCharge) && (
             <div className="cc-grid-2">
@@ -207,7 +227,6 @@ export function PreBookingScreen() {
               )}
             </div>
           )}
-          <Field field={{ key: "status", label: "Status", type: "select", options: ["Active", "Inactive"] }} value={form.status} onChange={set} />
           {error && <div className="cc-error">{error}</div>}
         </Modal>
       )}

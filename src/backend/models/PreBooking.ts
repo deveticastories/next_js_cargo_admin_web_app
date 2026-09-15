@@ -19,7 +19,11 @@ const preBookingSchema = new Schema(
     bundleType: { type: String, enum: ["Bundle", "Box", "CBM", "KG"], required: true },
     productType: { type: String, enum: ["Branded", "Normal"], required: true },
     repackingStatus: { type: String, enum: ["Ready to Ship", "Repacking Required"], default: "Repacking Required" },
-    status: { type: String, enum: ["Active", "Inactive"], default: "Active" },
+    // Starts at "Pending" when a pre-booking is first created, then "Collected" once
+    // the sender's goods are picked up (see `PreBookingStatus` in src/types). "Active"
+    // and "Inactive" are kept in the enum only so pre-existing records saved under the
+    // old flow can still be read/edited — the form no longer offers them.
+    status: { type: String, enum: ["Pending", "Collected", "Active", "Inactive"], default: "Pending" },
     stuffed: { type: Boolean, default: false },
     // Conditional extra charges from the pre-booking form — each only applies
     // under its own condition (see the matching comment on `PreBooking` in
