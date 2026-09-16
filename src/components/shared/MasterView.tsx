@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/Button";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { DataTable } from "@/components/ui/DataTable";
 import { Modal } from "@/components/ui/Modal";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { Field } from "@/components/ui/Field";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Plus } from "lucide-react";
@@ -37,6 +38,8 @@ export interface MasterViewProps<T extends RecordWithId> {
   autoOpenNew?: boolean;
   /** Pre-fills every "new" form — both a manual "+ New" click and an `autoOpenNew` arrival — e.g. sensible defaults for select fields, or a name typed elsewhere. */
   initialNewValues?: Record<string, unknown>;
+  /** Asks "Are you sure?" before the table's Active/Inactive badge click actually flips the status. Off by default — most screens' status toggle is low-stakes enough not to need it. */
+  confirmStatusToggle?: boolean;
 }
 
 const STATUS_FIELD: FieldConfig = { key: "status", label: "Status", type: "select", options: ["Active", "Inactive"] };
@@ -55,6 +58,7 @@ export function MasterView<T extends RecordWithId>({
   footer,
   autoOpenNew = false,
   initialNewValues,
+  confirmStatusToggle = false,
 }: MasterViewProps<T>) {
   const { items: rows, loading, error: loadError, create, update, remove } = collection;
   const [query, setQuery] = useState("");
@@ -71,6 +75,9 @@ export function MasterView<T extends RecordWithId>({
   // Which row's delete/status-toggle request is currently in flight — DataTable dims that
   // row's action so a second click can't fire while the first is still saving.
   const [busyRowId, setBusyRowId] = useState<string | null>(null);
+  // Set (via a status-badge click) while `confirmStatusToggle` is waiting on its
+  // app-styled confirm dialog, rather than a plain `window.confirm()`.
+  const [statusConfirmRow, setStatusConfirmRow] = useState<T | null>(null);
 
   const filtered = useMemo(() => {
     if (!query.trim()) return rows;
@@ -129,16 +136,23 @@ export function MasterView<T extends RecordWithId>({
     }
   };
 
-  const toggleStatus = async (row: T) => {
+  const doToggleStatus = async (row: T) => {
     const current = (row as { status?: Status }).status;
+    const next = current === "Active" ? "Inactive" : "Active";
     setBusyRowId(row.id);
     try {
-      await update(row.id, { status: current === "Active" ? "Inactive" : "Active" });
+      await update(row.id, { status: next });
     } catch (err) {
       alert(errorMessage(err, "Failed to update status."));
     } finally {
       setBusyRowId(null);
     }
+  };
+  const toggleStatus = (row: T) => (confirmStatusToggle ? setStatusConfirmRow(row) : doToggleStatus(row));
+  const confirmToggleStatus = async () => {
+    if (!statusConfirmRow) return;
+    await doToggleStatus(statusConfirmRow);
+    setStatusConfirmRow(null);
   };
 
   const allColumns: ColumnConfig<T>[] = hasStatus
@@ -200,6 +214,18 @@ export function MasterView<T extends RecordWithId>({
           )}
           {formError && <div className="cc-error">{formError}</div>}
         </Modal>
+      )}
+      {statusConfirmRow && (
+        <ConfirmModal
+          title="Change status?"
+          message={`Are you sure you want to change the status to ${
+            (statusConfirmRow as unknown as { status?: Status }).status === "Active" ? "Inactive" : "Active"
+          }?`}
+          confirmLabel="Yes, change it"
+          submitting={busyRowId === statusConfirmRow.id}
+          onConfirm={confirmToggleStatus}
+          onCancel={() => setStatusConfirmRow(null)}
+        />
       )}
     </div>
   );

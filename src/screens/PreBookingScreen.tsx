@@ -77,12 +77,13 @@ export function PreBookingScreen() {
     // here (regardless of what's still sitting in the hidden field) so a
     // charge typed in while its condition held can never be saved once the
     // pre-booking no longer meets it (e.g. product type switched away from
-    // "Branded" after a brand handling charge was entered).
+    // "Branded" after a brand handling charge was entered). Bundle handling
+    // charge has no form field at all anymore (per request) — always 0.
     const payload = {
       ...form,
       brandHandlingCharge: form.productType === "Branded" ? Number(form.brandHandlingCharge) || 0 : 0,
       pickupCharge: form.billOption === "Without Bill" ? Number(form.pickupCharge) || 0 : 0,
-      bundleHandlingCharge: Number(form.bundleCount) < 5 ? Number(form.bundleHandlingCharge) || 0 : 0,
+      bundleHandlingCharge: 0,
     };
     setSaving(true);
     try {
@@ -126,7 +127,6 @@ export function PreBookingScreen() {
 
   const showBrandHandlingCharge = form.productType === "Branded";
   const showPickupCharge = form.billOption === "Without Bill";
-  const showBundleHandlingCharge = Number(form.bundleCount) > 0 && Number(form.bundleCount) < 5;
 
   return (
     <div>
@@ -153,7 +153,7 @@ export function PreBookingScreen() {
         </div>
         {preBookings.error && <div className="cc-alert-error" style={{ margin: "14px 18px 0" }}>{preBookings.error}</div>}
         {preBookings.loading ? (
-          <SkeletonTable columns={11} />
+          <SkeletonTable columns={7} />
         ) : (
           <DataTable
             columns={[
@@ -162,12 +162,7 @@ export function PreBookingScreen() {
               { key: "phoneNumber", label: "Phone number" },
               { key: "date", label: "Date", render: (r) => fmtDate(r.date) },
               { key: "bundleCount", label: "Bundles" },
-              // Set by the Repacking screen's "Confirm" action, not the pre-booking form — 0/"—" until repacking's been confirmed once.
-              { key: "actualBundle", label: "Actual bundle", render: (r) => (r.actualBundle ? r.actualBundle : "—") },
               { key: "bundleType", label: "Bundle type" },
-              { key: "productType", label: "Product type" },
-              { key: "billOption", label: "Bill", render: (r) => <Badge value={r.billOption} /> },
-              { key: "repackingStatus", label: "Pack status", render: (r) => <Badge value={r.repackingStatus} /> },
               { key: "status", label: "Status", render: (r) => <Badge value={r.status} /> },
             ]}
             rows={filtered}
@@ -202,11 +197,8 @@ export function PreBookingScreen() {
             <Field field={{ key: "bundleCount", label: "Bundle count", type: "number" }} value={form.bundleCount} onChange={set} />
             <Field field={{ key: "bundleType", label: "Bundle type", type: "select", options: ["Bundle", "Box", "CBM", "KG"] }} value={form.bundleType} onChange={set} />
           </div>
-          <div className="cc-grid-2">
-            <Field field={{ key: "repackingStatus", label: "Pack status", type: "select", options: ["Ready to Ship", "Repacking Required"] }} value={form.repackingStatus} onChange={set} />
-            <Field field={{ key: "status", label: "Status", type: "select", options: ["Pending", "Collected"] }} value={form.status} onChange={set} />
-          </div>
-          {(showBrandHandlingCharge || showPickupCharge || showBundleHandlingCharge) && (
+          <Field field={{ key: "status", label: "Status", type: "select", options: ["Pending", "Collected"] }} value={form.status} onChange={set} />
+          {(showBrandHandlingCharge || showPickupCharge) && (
             <div className="cc-grid-2">
               {showBrandHandlingCharge && (
                 <Field
@@ -217,13 +209,6 @@ export function PreBookingScreen() {
               )}
               {showPickupCharge && (
                 <Field field={{ key: "pickupCharge", label: "Pickup charge", type: "number" }} value={form.pickupCharge} onChange={set} />
-              )}
-              {showBundleHandlingCharge && (
-                <Field
-                  field={{ key: "bundleHandlingCharge", label: "Bundle handling charge (below 5 bundles)", type: "number" }}
-                  value={form.bundleHandlingCharge}
-                  onChange={set}
-                />
               )}
             </div>
           )}

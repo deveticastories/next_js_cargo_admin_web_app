@@ -97,6 +97,8 @@ export interface PickupAssign extends BaseRecord {
   amount: number;
   paymentStatus: PaymentStatus | "";
   pickupStatus: PickupStatus | "";
+  /** How many bundles were actually collected — set when `pickupStatus` moves to "Collected". 0 until then. */
+  collectedBundle: number;
 }
 
 export interface Booking extends BaseRecord {
