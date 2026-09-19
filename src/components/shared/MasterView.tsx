@@ -38,6 +38,10 @@ export interface MasterViewProps<T extends RecordWithId> {
   autoOpenNew?: boolean;
   /** Pre-fills every "new" form — both a manual "+ New" click and an `autoOpenNew` arrival — e.g. sensible defaults for select fields, or a name typed elsewhere. */
   initialNewValues?: Record<string, unknown>;
+  /** Return false to hide a row's delete button. */
+  canDelete?: (row: T) => boolean;
+  /** Disable a field in the edit form, given the row as currently saved (undefined when adding). */
+  isFieldDisabled?: (fieldKey: string, savedRow: T | undefined) => boolean;
   /** Asks "Are you sure?" before the table's Active/Inactive badge click actually flips the status. Off by default — most screens' status toggle is low-stakes enough not to need it. */
   confirmStatusToggle?: boolean;
 }
@@ -58,6 +62,8 @@ export function MasterView<T extends RecordWithId>({
   footer,
   autoOpenNew = false,
   initialNewValues,
+  canDelete,
+  isFieldDisabled,
   confirmStatusToggle = false,
 }: MasterViewProps<T>) {
   const { items: rows, loading, error: loadError, create, update, remove } = collection;
@@ -195,7 +201,7 @@ export function MasterView<T extends RecordWithId>({
       {loading ? (
         <SkeletonTable columns={allColumns.length + 1} />
       ) : (
-        <DataTable columns={allColumns} rows={filtered} onEdit={openEdit} onDelete={handleDelete} busyRowId={busyRowId} />
+        <DataTable columns={allColumns} rows={filtered} onEdit={openEdit} onDelete={handleDelete} canDelete={canDelete} busyRowId={busyRowId} />
       )}
       {footer?.(rows)}
       {modalRow && (
@@ -203,7 +209,7 @@ export function MasterView<T extends RecordWithId>({
           {fields.map((f) => (
             <Field
               key={f.key}
-              field={f}
+              field={isFieldDisabled?.(f.key, rows.find((r) => r.id === modalRow)) ? { ...f, disabled: true } : f}
               value={form[f.key]}
               onChange={(k, v) => setForm({ ...form, [k]: v })}
               error={formError && f.required && !form[f.key] ? formError : null}

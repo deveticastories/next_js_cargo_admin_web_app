@@ -14,7 +14,6 @@ const pad4 = (n: number): string => String(n).padStart(4, "0");
  */
 export function withCode(schema: Schema, prefix: string): void {
   schema.add({ code: { type: String, unique: true } });
-
   schema.pre("validate", async function assignCode() {
     if (this.get("code")) return;
     const Model = this.constructor as Model<unknown>;

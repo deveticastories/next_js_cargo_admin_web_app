@@ -201,6 +201,8 @@ export interface PackingList {
   booking: string;
   bundleNumber: number;
   items: BundleLineItem[];
+  /** Set by the Repacking screen's Confirm; empty for lists only ever saved from Ready to ship. */
+  repackedBy?: string;
 }
 
 /** One "load these bookings into this container" event. Mirrors `Stuffing` in the backend. */

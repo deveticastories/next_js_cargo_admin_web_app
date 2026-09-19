@@ -8,6 +8,8 @@ export interface DataTableProps<T extends RecordWithId> {
   rows: T[];
   onEdit?: (row: T) => void;
   onDelete?: (row: T) => void;
+  /** Return false to hide the delete button for a row. */
+  canDelete?: (row: T) => boolean;
   emptyText?: string;
   /** Id of the row whose delete/status-toggle request is in flight, if any — that row's delete button spins and every action on it disables. */
   busyRowId?: string | null;
@@ -19,6 +21,7 @@ export function DataTable<T extends RecordWithId>({
   rows,
   onEdit,
   onDelete,
+  canDelete,
   emptyText = "No records yet.",
   busyRowId = null,
 }: DataTableProps<T>) {
@@ -55,7 +58,7 @@ export function DataTable<T extends RecordWithId>({
                           <Pencil size={15} />
                         </Button>
                       )}
-                      {onDelete && (
+                      {onDelete && (!canDelete || canDelete(row)) && (
                         <Button variant="ghost" onClick={() => onDelete(row)} loading={isBusy} aria-label="Delete">
                           {!isBusy && <Trash2 size={15} color={colors.danger} />}
                         </Button>

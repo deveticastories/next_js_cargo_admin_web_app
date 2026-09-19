@@ -6,6 +6,7 @@ import { MasterView } from "@/components/shared/MasterView";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { NoticeModal } from "@/components/ui/NoticeModal";
 import { Field } from "@/components/ui/Field";
 import { ApiError } from "@/utils/apiClient";
 import type { PickupAssign } from "@/types";
@@ -22,9 +23,11 @@ export function PickupAssignScreen() {
   const [collectError, setCollectError] = useState("");
   // Payment status needs no extra data (unlike Pickup status' bundle count), so a badge
   // click just confirms (via the app-styled `ConfirmModal`, not a browser `window.confirm`)
-  // and flips Unpaid <-> Paid.
+  // and marks it Paid. Paid is final: clicking a Paid badge just shows an alert.
   const [paymentBusyId, setPaymentBusyId] = useState<string | null>(null);
   const [paymentConfirmRow, setPaymentConfirmRow] = useState<PickupAssign | null>(null);
+  // Set when a Paid badge is clicked — Paid is final, so this just explains why nothing happens.
+  const [paidLockedRow, setPaidLockedRow] = useState<PickupAssign | null>(null);
 
   const openCollect = (row: PickupAssign) => {
     setCollectRow(row);
@@ -97,9 +100,16 @@ export function PickupAssignScreen() {
             label: "Payment",
             render: (r) => (
               <span
-                onClick={() => paymentBusyId !== r.id && setPaymentConfirmRow(r)}
+                onClick={() => {
+                  if (paymentBusyId === r.id) return;
+                  if (r.paymentStatus === "Paid") {
+                    setPaidLockedRow(r);
+                    return;
+                  }
+                  setPaymentConfirmRow(r);
+                }}
                 style={paymentBusyId === r.id ? { cursor: "default", opacity: 0.5, pointerEvents: "none" } : { cursor: "pointer" }}
-                title="Click to toggle Unpaid / Paid"
+                title={r.paymentStatus === "Paid" ? "Paid — can't be changed back to Unpaid" : "Click to mark as Paid"}
               >
                 <Badge value={r.paymentStatus} />
               </span>
@@ -121,6 +131,9 @@ export function PickupAssignScreen() {
         ]}
         collection={pickupAssigns}
         initialNewValues={{ paymentStatus: "Unpaid", pickupStatus: "Pending" }}
+        canDelete={(r) => r.pickupStatus !== "Collected"}
+        // Paid is final — the edit form can't flip it back to Unpaid either.
+        isFieldDisabled={(key, saved) => key === "paymentStatus" && saved?.paymentStatus === "Paid"}
         confirmStatusToggle
       />
 
@@ -139,6 +152,14 @@ export function PickupAssignScreen() {
           />
           {collectError && <div className="cc-error">{collectError}</div>}
         </Modal>
+      )}
+
+      {paidLockedRow && (
+        <NoticeModal
+          title="Payment already Paid"
+          message={`"${paidLockedRow.transport}" (${paidLockedRow.lrNo}) is already marked as Paid. A paid payment status can't be changed back to Unpaid.`}
+          onClose={() => setPaidLockedRow(null)}
+        />
       )}
 
       {paymentConfirmRow && (

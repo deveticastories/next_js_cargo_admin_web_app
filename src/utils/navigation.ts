@@ -10,7 +10,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   LayoutDashboard, Users, UsersRound, Warehouse, Truck, Bike, Tags,
-  ClipboardList, CalendarPlus, PackagePlus, PackageCheck, Boxes, Ship, ArrowRightLeft,
+  ClipboardList, CalendarPlus, PackagePlus, PackageCheck, Boxes, Ship, ArrowRightLeft, PackageOpen,
   FileText, Wallet, Receipt, BarChart3,
 } from "lucide-react";
 
@@ -44,9 +44,10 @@ export const NAV: NavGroup[] = [
       { href: "/admin/pickup-assign", label: "Pickup assign", icon: ClipboardList },
       { href: "/admin/pre-booking", label: "Pre-booking", icon: CalendarPlus },
       { href: "/admin/booking", label: "Booking", icon: PackagePlus },
-      { href: "/admin/ready-to-ship", label: "Ready to ship", icon: PackageCheck },
+      { href: "/admin/ready-to-ship", label: "Packing ready", icon: PackageCheck },
       { href: "/admin/repacking", label: "Repacking", icon: Boxes },
       { href: "/admin/containers", label: "Containers", icon: Ship },
+      { href: "/admin/ready-to-stuff", label: "Ready to stuff", icon: PackageOpen },
       { href: "/admin/stuffing", label: "Stuffing", icon: ArrowRightLeft },
     ],
   },
@@ -82,9 +83,10 @@ export const PAGE_TITLES: Record<string, [string, string]> = {
   "/admin/pickup-assign": ["Pickup assign", "Assign a transport and LR number to a collection run"],
   "/admin/pre-booking": ["Pre-booking", "Book a shipment in before the receiver is known"],
   "/admin/booking": ["Booking", "Create and track shipment bookings"],
-  "/admin/ready-to-ship": ["Ready to ship", "Pack bundles and download the shipping list"],
+  "/admin/ready-to-ship": ["Packing ready", "Pack bundles and download the shipping list"],
   "/admin/repacking": ["Repacking", "Repack bundles before they move to ready to ship"],
   "/admin/containers": ["Container management", "Track containers moving between Kochi and the UAE"],
+  "/admin/ready-to-stuff": ["Ready to stuff", "Ready-to-ship bookings waiting to be loaded into a container"],
   "/admin/stuffing": ["Stuffing", "Load ready-to-ship bookings into a container"],
   "/admin/invoicing": ["Invoicing", "Generate invoices and delivery notes"],
   "/admin/credit-note": ["Credit note", "Petty cash fund, carried forward month to month"],

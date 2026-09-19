@@ -1,4 +1,4 @@
-import { Schema, model, models } from "mongoose";
+import mongoose, { Schema, model, models } from "mongoose";
 import { baseSchemaOptions } from "@/backend/utils/schemaOptions";
 
 /** One row of a packing list. Mirrors `BundleLineItem` in src/types. */
@@ -25,9 +25,17 @@ const packingListSchema = new Schema(
     booking: { type: Schema.Types.ObjectId, ref: "Booking", required: true },
     bundleNumber: { type: Number, required: true, min: 1 },
     items: { type: [bundleLineItemSchema], default: [] },
+    /** Who repacked this bundle — recorded by the Repacking screen's Confirm; left untouched by Ready to ship saves. */
+    repackedBy: { type: String, default: "", trim: true },
   },
   baseSchemaOptions
 );
 packingListSchema.index({ booking: 1, bundleNumber: 1 }, { unique: true });
+
+// In dev, hot reload keeps the first-registered model alive — one compiled before `repackedBy`
+// existed would silently strip that field on every save, so drop a stale copy and re-register.
+if (models.PackingList && !models.PackingList.schema.path("repackedBy")) {
+  mongoose.deleteModel("PackingList");
+}
 
 export const PackingList = models.PackingList ?? model("PackingList", packingListSchema);

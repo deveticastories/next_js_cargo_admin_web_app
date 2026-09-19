@@ -147,13 +147,15 @@ export function BookingScreen() {
               { key: "bundleType", label: "Bundle type" },
               { key: "productType", label: "Product type" },
               { key: "billOption", label: "Bill", render: (r) => <Badge value={r.billOption} /> },
-              { key: "repackingStatus", label: "Pack status", render: (r) => <Badge value={r.repackingStatus} /> },
+              { key: "repackingStatus", label: "Pack status", render: (r) => <Badge value={r.repackingStatus} label={r.repackingStatus === "Ready to Ship" ? "Package Ready" : undefined} /> },
               { key: "stuffed", label: "Stuffed", render: (r) => (r.stuffed ? <Badge value="Stuffed" /> : "—") },
               { key: "status", label: "Status", render: (r) => <Badge value={r.status} /> },
             ]}
             rows={filtered}
             onEdit={openEdit}
             onDelete={removeBooking}
+            // Once a booking has been marked Ready to Ship or repacked, it's part of the downstream workflow.
+            canDelete={(r) => r.repackingStatus !== "Ready to Ship" && !r.actualBundle}
             busyRowId={deletingId}
           />
         )}

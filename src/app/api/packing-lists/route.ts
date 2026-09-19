@@ -24,13 +24,13 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
 export const POST = withErrorHandling(async (req: NextRequest) => {
   await requireAuth(req);
   await connectDB();
-  const body = await readJsonBody<{ bookingId?: string; bundleNumber?: number; items?: unknown[] }>(req);
+  const body = await readJsonBody<{ bookingId?: string; bundleNumber?: number; items?: unknown[]; repackedBy?: string }>(req);
   if (!body.bookingId || !body.bundleNumber) {
     throw new HttpError("bookingId and bundleNumber are required.", 400);
   }
   const list = await PackingList.findOneAndUpdate(
     { booking: body.bookingId, bundleNumber: body.bundleNumber },
-    { items: body.items ?? [] },
+    { items: body.items ?? [], ...(typeof body.repackedBy === "string" ? { repackedBy: body.repackedBy } : {}) },
     { new: true, upsert: true, runValidators: true }
   );
   return NextResponse.json(list);
