@@ -33,7 +33,7 @@ export function Field({ field, value, onChange, error }: FieldProps) {
           <option value="">Choose {field.label.toLowerCase()}</option>
           {(field.options ?? []).map((option) => (
             <option key={option} value={option}>
-              {option}
+              {field.optionLabels?.[option] ?? option}
             </option>
           ))}
         </select>

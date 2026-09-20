@@ -15,16 +15,17 @@ import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { api } from "@/utils/apiClient";
-import { downloadText, fmtDate, money } from "@/utils/format";
+import { fmtDate, money } from "@/utils/format";
+import { downloadDeliveryNotePdf, downloadInvoicePdf } from "@/utils/pdf";
 import type { BundleLineItem } from "@/types";
 
 export function InvoicingScreen() {
-  const { bookings, receivers, pricing, deliveryPartners } = useCargoData();
+  const { bookings, senders, receivers, pricing, deliveryPartners, invoices } = useCargoData();
   const [bookingId, setBookingId] = useState("");
   const [pickupCharge, setPickupCharge] = useState("0");
   const [deliveryPartner, setDeliveryPartner] = useState("");
   const [dnBookingId, setDnBookingId] = useState("");
-  const [packingRows, setPackingRows] = useState<BundleLineItem[]>([]);
+  const [packingRows, setPackingRows] = useState<(BundleLineItem & { bundleNumber: number })[]>([]);
   const [loadingPackingList, setLoadingPackingList] = useState(false);
 
   const booking = bookings.items.find((b) => b.id === bookingId);
@@ -40,15 +41,40 @@ export function InvoicingScreen() {
   const showPickupCharge = booking?.billOption === "Without Bill";
   const total = subtotal - discountAmt + (showPickupCharge ? Number(pickupCharge || 0) : 0) + deliveryCharge;
 
-  const generateInvoice = () => {
+  const partyOf = (name: string, kind: "sender" | "receiver"): { name: string; lines: string[] } => {
+    const found = (kind === "sender" ? senders.items : receivers.items).find((p) => p.name === name);
+    return { name, lines: found ? [found.location, found.whatsapp ? `Ph: ${found.whatsapp}` : ""] : [] };
+  };
+
+  const generateInvoice = async () => {
     if (!booking) {
       alert("Choose a booking first.");
       return;
     }
-    const text = `INVOICE — ${booking.code}\nSender: ${booking.sender}\nReceiver: ${booking.receiver}\nRoute price: ${money(unitPrice)} x ${bundles} bundle(s) = ${money(subtotal)}\nDiscount (${discountPct}%): -${money(discountAmt)}\n${
-      showPickupCharge ? `Pickup charge: ${money(pickupCharge)}\n` : ""
-    }Delivery partner: ${deliveryPartner || "—"} (${money(deliveryCharge)})\nTOTAL: ${money(total)}`;
-    downloadText(`${booking.code}-invoice.txt`, text);
+    // Save the invoice (one per booking — regenerating refreshes its amount) so Receipt Entry can pick it.
+    let invoiceNo = "";
+    try {
+      const payload = { bookingCode: booking.code, sender: booking.sender, receiver: booking.receiver, amount: total, deliveryPartner, deliveryCharge };
+      const existing = invoices.items.find((i) => i.bookingCode === booking.code);
+      const saved = existing ? await invoices.update(existing.id, payload) : await invoices.create(payload);
+      invoiceNo = saved?.code ?? existing?.code ?? "";
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to save the invoice.");
+      return;
+    }
+    const rows = [
+      { description: `Freight to ${route?.to ?? "destination"} (${booking.bundleType || "Bundle"})`, rate: unitPrice, qty: bundles, amount: subtotal },
+      ...(discountPct ? [{ description: `Receiver discount (${discountPct}%)`, amount: -discountAmt }] : []),
+      ...(deliveryPartner ? [{ description: `Delivery charge (${deliveryPartner})`, amount: deliveryCharge }] : []),
+    ];
+    await downloadInvoicePdf(`${booking.code}-invoice.pdf`, {
+      invoiceNo: invoiceNo || booking.code,
+      bookingDate: fmtDate(booking.date),
+      receiver: partyOf(booking.receiver, "receiver"),
+      rows,
+      extraCharges: { withoutBill: showPickupCharge ? Number(pickupCharge || 0) : 0 },
+      total,
+    });
   };
 
   const dnBooking = bookings.items.find((b) => b.id === dnBookingId);
@@ -65,9 +91,9 @@ export function InvoicingScreen() {
       }
       setLoadingPackingList(true);
       api
-        .get<{ items: BundleLineItem[] }[]>(`/packing-lists?bookingId=${dnBookingId}`)
+        .get<{ bundleNumber: number; items: BundleLineItem[] }[]>(`/packing-lists?bookingId=${dnBookingId}`)
         .then((lists) => {
-          if (!cancelled) setPackingRows(lists.flatMap((l) => l.items));
+          if (!cancelled) setPackingRows(lists.flatMap((l) => l.items.map((i) => ({ ...i, bundleNumber: l.bundleNumber }))));
         })
         .catch(() => {
           if (!cancelled) setPackingRows([]);
@@ -81,14 +107,18 @@ export function InvoicingScreen() {
     };
   }, [dnBookingId]);
 
-  const generateDeliveryNote = () => {
+  const generateDeliveryNote = async () => {
     if (!dnBooking) {
       alert("Choose a booking first.");
       return;
     }
-    const rows = packingRows.map((l) => `${l.product} | Qty ${l.qty} | ${l.fabric}`).join("\n") || "No packing list recorded yet.";
-    const text = `DELIVERY NOTE — ${dnBooking.code}\nSender: ${dnBooking.sender}\nBooking date: ${fmtDate(dnBooking.date)}\n\nPacking list:\n${rows}`;
-    downloadText(`${dnBooking.code}-delivery-note.txt`, text);
+    await downloadDeliveryNotePdf(`${dnBooking.code}-delivery-note.pdf`, {
+      lrNo: dnBooking.code,
+      bookingDate: fmtDate(dnBooking.date),
+      sender: partyOf(dnBooking.sender, "sender"),
+      receiver: partyOf(dnBooking.receiver, "receiver"),
+      rows: packingRows.map((l) => ({ bundleNo: String(l.bundleNumber), product: [l.product, l.fabric].filter(Boolean).join(" - "), qty: l.qty })),
+    });
   };
 
   return (
@@ -138,7 +168,7 @@ export function InvoicingScreen() {
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
               <Button variant="primary" onClick={generateInvoice}>
-                <Download size={15} /> Generate &amp; download invoice
+                <Download size={15} /> Generate &amp; download invoice PDF
               </Button>
             </div>
           </>
@@ -177,17 +207,30 @@ export function InvoicingScreen() {
             ) : packingRows.length === 0 ? (
               <div className="cc-empty">No packing list recorded for this booking yet.</div>
             ) : (
-              <ul style={{ fontSize: 12.5, color: "var(--text-soft)", paddingLeft: 18 }}>
-                {packingRows.map((l, i) => (
-                  <li key={i}>
-                    {l.product} — qty {l.qty}, {l.fabric}
-                  </li>
-                ))}
-              </ul>
+              <div className="cc-table-wrap" style={{ border: "1px solid var(--border)", borderRadius: 10, maxHeight: 240, overflowY: "auto" }}>
+                <table className="cc-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: 90 }}>Bundle</th>
+                      <th>Product</th>
+                      <th style={{ width: 80 }}>Qty</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {packingRows.map((l, i) => (
+                      <tr key={i}>
+                        <td>{l.bundleNumber}</td>
+                        <td>{[l.product, l.fabric].filter(Boolean).join(" - ")}</td>
+                        <td>{l.qty}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
               <Button variant="primary" onClick={generateDeliveryNote}>
-                <Download size={15} /> Generate &amp; download note
+                <Download size={15} /> Generate &amp; download note PDF
               </Button>
             </div>
           </div>

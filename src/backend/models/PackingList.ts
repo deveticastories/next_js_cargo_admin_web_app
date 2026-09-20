@@ -27,6 +27,8 @@ const packingListSchema = new Schema(
     items: { type: [bundleLineItemSchema], default: [] },
     /** Who repacked this bundle — recorded by the Repacking screen's Confirm; left untouched by Ready to ship saves. */
     repackedBy: { type: String, default: "", trim: true },
+    /** True once this bundle's list was saved from the Ready to ship screen (repacking alone doesn't set it). */
+    readySaved: { type: Boolean, default: false },
   },
   baseSchemaOptions
 );
@@ -34,7 +36,7 @@ packingListSchema.index({ booking: 1, bundleNumber: 1 }, { unique: true });
 
 // In dev, hot reload keeps the first-registered model alive — one compiled before `repackedBy`
 // existed would silently strip that field on every save, so drop a stale copy and re-register.
-if (models.PackingList && !models.PackingList.schema.path("repackedBy")) {
+if (models.PackingList && !models.PackingList.schema.path("readySaved")) {
   mongoose.deleteModel("PackingList");
 }
 

@@ -15,6 +15,8 @@ export function CustomersScreen() {
   const [tab, setTab] = useState<"sender" | "receiver">(searchParams.get("tab") === "receiver" ? "receiver" : "sender");
   const autoOpenNewSender = tab === "sender" && searchParams.get("newSender") === "1";
   const prefillSenderName = searchParams.get("senderName") ?? "";
+  const autoOpenNewReceiver = tab === "receiver" && searchParams.get("newReceiver") === "1";
+  const prefillReceiverName = searchParams.get("receiverName") ?? "";
 
   return (
     <div>
@@ -64,6 +66,8 @@ export function CustomersScreen() {
             { key: "discount", label: "Discount", render: (r) => `${r.discount || 0}%` },
           ]}
           collection={receivers}
+          autoOpenNew={autoOpenNewReceiver}
+          initialNewValues={prefillReceiverName ? { name: prefillReceiverName } : undefined}
         />
       )}
     </div>

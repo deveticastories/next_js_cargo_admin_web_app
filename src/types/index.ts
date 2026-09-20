@@ -19,7 +19,7 @@ export type ProductType = "Branded" | "Normal";
 export type RepackingStatus = "Ready to Ship" | "Repacking Required";
 
 /** Pre-booking's own status flow — starts at "Pending" on creation, moves to "Collected" once the sender's goods are picked up. Distinct from the generic `Status` used elsewhere. */
-export type PreBookingStatus = "Pending" | "Collected";
+export type PreBookingStatus = "Pending" | "Collected" | "Canceled";
 
 /** Pickup assign's collection status — starts at "Pending", moves to "Collected" once the transport has picked up. */
 export type PickupStatus = "Pending" | "Collected";
@@ -176,6 +176,32 @@ export interface DailyExpense {
   description?: string;
 }
 
+/** An invoice generated on the Invoicing screen (one per booking). Mirrors `Invoice` in the backend. */
+export interface Invoice {
+  id: string;
+  /** Invoice number, e.g. "INV-0001". */
+  code: string;
+  bookingCode: string;
+  sender?: string;
+  receiver?: string;
+  amount: number;
+  deliveryPartner?: string;
+  deliveryCharge?: number;
+  deliveryPaymentStatus?: "Paid" | "Pending";
+  createdAt?: string;
+}
+
+/** Money received against an invoice (invoice no. = the booking code). Mirrors `ReceiptEntry` in the backend. */
+export interface ReceiptEntry {
+  id: string;
+  code: string;
+  date: string;
+  invoiceNo: string;
+  /** Full invoice total at the time of receipt. */
+  invoiceAmount: number;
+  receivedAmount: number;
+}
+
 /** One petty-cash fund entry. Balance carries forward automatically. */
 export interface CreditNoteEntry {
   id: string;
@@ -203,6 +229,8 @@ export interface PackingList {
   items: BundleLineItem[];
   /** Set by the Repacking screen's Confirm; empty for lists only ever saved from Ready to ship. */
   repackedBy?: string;
+  /** True once saved from the Ready to ship screen. */
+  readySaved?: boolean;
 }
 
 /** One "load these bookings into this container" event. Mirrors `Stuffing` in the backend. */
@@ -235,6 +263,7 @@ export interface FieldConfig {
   label: string;
   type?: FieldType;
   options?: string[];
+  optionLabels?: Record<string, string>;
   required?: boolean;
   placeholder?: string;
   /** Renders the input read-only — for a value the form computes rather than the user types. */

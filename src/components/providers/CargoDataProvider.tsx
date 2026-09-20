@@ -16,10 +16,12 @@ import type {
   DailyExpense,
   DeliveryPartner,
   Employee,
+  Invoice,
   PickupAssign,
   PickupPartner,
   PreBooking,
   PricingRoute,
+  ReceiptEntry,
   Receiver,
   Sender,
   Store,
@@ -41,6 +43,8 @@ export interface CargoData {
   preBookings: ApiCollection<PreBooking>;
   containers: ApiCollection<Container>;
   dailyExpenses: ApiCollection<DailyExpense>;
+  invoices: ApiCollection<Invoice>;
+  receiptEntries: ApiCollection<ReceiptEntry>;
   creditNotes: ApiCollection<CreditNoteEntry>;
   stuffings: ApiCollection<Stuffing>;
   uaeStoreLog: ApiCollection<UaeStoreLogEntry>;
@@ -62,6 +66,8 @@ export function CargoDataProvider({ children }: { children: ReactNode }) {
     preBookings: useApiCollection<PreBooking>("/pre-bookings"),
     containers: useApiCollection<Container>("/containers"),
     dailyExpenses: useApiCollection<DailyExpense>("/expenses"),
+    invoices: useApiCollection<Invoice>("/invoices"),
+    receiptEntries: useApiCollection<ReceiptEntry>("/receipts"),
     creditNotes: useApiCollection<CreditNoteEntry>("/credit-notes"),
     stuffings: useApiCollection<Stuffing>("/stuffings"),
     uaeStoreLog: useApiCollection<UaeStoreLogEntry>("/uae-store-log"),

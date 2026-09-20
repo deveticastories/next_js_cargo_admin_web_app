@@ -23,7 +23,7 @@ const preBookingSchema = new Schema(
     // the sender's goods are picked up (see `PreBookingStatus` in src/types). "Active"
     // and "Inactive" are kept in the enum only so pre-existing records saved under the
     // old flow can still be read/edited — the form no longer offers them.
-    status: { type: String, enum: ["Pending", "Collected", "Active", "Inactive"], default: "Pending" },
+    status: { type: String, enum: ["Pending", "Collected", "Canceled", "Active", "Inactive"], default: "Pending" },
     stuffed: { type: Boolean, default: false },
     // Conditional extra charges from the pre-booking form — each only applies
     // under its own condition (see the matching comment on `PreBooking` in
@@ -40,5 +40,9 @@ const preBookingSchema = new Schema(
   baseSchemaOptions
 );
 withCode(preBookingSchema, "PBK");
+
+// In dev, hot reload keeps the previously registered model (with its old schema/enum)
+// alive in `models` — drop it so schema edits take effect without restarting the server.
+if (process.env.NODE_ENV !== "production") delete models.PreBooking;
 
 export const PreBooking = models.PreBooking ?? model("PreBooking", preBookingSchema);

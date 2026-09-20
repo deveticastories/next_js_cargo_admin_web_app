@@ -31,13 +31,13 @@ export function PreBookingScreen() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [statusBusyId, setStatusBusyId] = useState<string | null>(null);
 
   const filtered = preBookings.items.filter((b) =>
     Object.values(b).some((v) => String(v).toLowerCase().includes(query.toLowerCase()))
   );
-  const readyBundles = preBookings.items
-    .filter((b) => b.repackingStatus === "Ready to Ship")
-    .reduce((sum, b) => sum + Number(b.bundleCount || 0), 0);
+  const collectedBookings = preBookings.items.filter((b) => b.status === "Collected");
+  const [showCollected, setShowCollected] = useState(false);
   // Bundle count total per unit of measure, across every pre-booking.
   const bundleTypeTotals: Record<string, number> = { Bundle: 0, Box: 0, CBM: 0, KG: 0 };
   for (const b of preBookings.items) {
@@ -97,6 +97,20 @@ export function PreBookingScreen() {
     }
   };
 
+  // Inline status change from the table. Collected and Canceled are final —
+  // the dropdown isn't offered once a pre-booking reaches either.
+  const changeStatus = async (row: PreBooking, status: string) => {
+    if (status === row.status) return;
+    setStatusBusyId(row.id);
+    try {
+      await preBookings.update(row.id, { status });
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Failed to update status.");
+    } finally {
+      setStatusBusyId(null);
+    }
+  };
+
   const removePreBooking = async (row: PreBooking) => {
     if (!window.confirm(`Delete pre-booking ${row.code}?`)) return;
     setDeletingId(row.id);
@@ -130,9 +144,11 @@ export function PreBookingScreen() {
 
   return (
     <div>
-      <div className="cc-stat-grid">
+      <div className="cc-stat-grid cc-stat-grid--row">
         <StatCard label="Total pre-bookings" value={preBookings.items.length} />
-        <StatCard label="Ready-to-ship bundles" value={readyBundles} />
+        <div onClick={() => setShowCollected(true)} style={{ cursor: "pointer" }} title="View collected booking list">
+          <StatCard label="Collected booking list" value={collectedBookings.length} note="Click to view" />
+        </div>
         <StatCard label="Box" value={bundleTypeTotals.Box} />
         <StatCard label="Bundles" value={bundleTypeTotals.Bundle} />
         <StatCard label="CBM" value={bundleTypeTotals.CBM} />
@@ -163,15 +179,58 @@ export function PreBookingScreen() {
               { key: "date", label: "Date", render: (r) => fmtDate(r.date) },
               { key: "bundleCount", label: "Bundles" },
               { key: "bundleType", label: "Bundle type" },
-              { key: "status", label: "Status", render: (r) => <Badge value={r.status} /> },
+              {
+                key: "status",
+                label: "Status",
+                render: (r) =>
+                  r.status === "Collected" || r.status === "Canceled" ? (
+                    <span title={`${r.status} — can't be changed`}>
+                      <Badge value={r.status} />
+                    </span>
+                  ) : (
+                    <select
+                      value={r.status}
+                      disabled={statusBusyId === r.id}
+                      onChange={(e) => changeStatus(r, e.target.value)}
+                      title="Change status"
+                      style={{ padding: "4px 8px", borderRadius: 6, cursor: "pointer" }}
+                    >
+                      <option value="Pending">Pending</option>
+                      <option value="Collected">Collected</option>
+                      <option value="Canceled">Canceled</option>
+                    </select>
+                  ),
+              },
             ]}
             rows={filtered}
             onEdit={openEdit}
             onDelete={removePreBooking}
+            canEdit={(r) => r.status !== "Collected"}
+            canDelete={(r) => r.status !== "Collected"}
             busyRowId={deletingId}
           />
         )}
       </div>
+      {showCollected && (
+        <Modal
+          title="Collected booking list"
+          onClose={() => setShowCollected(false)}
+          onSubmit={() => setShowCollected(false)}
+          submitLabel="Close"
+        >
+          <DataTable
+            columns={[
+              { key: "code", label: "Pre-booking ID" },
+              { key: "sender", label: "Sender" },
+              { key: "phoneNumber", label: "Phone number" },
+              { key: "date", label: "Date", render: (r) => fmtDate(r.date) },
+              { key: "bundleCount", label: "Bundles" },
+              { key: "bundleType", label: "Bundle type" },
+            ]}
+            rows={collectedBookings}
+          />
+        </Modal>
+      )}
       {modalRow && (
         <Modal
           title={modalRow === "new" ? "New pre-booking" : "Edit pre-booking"}
@@ -197,7 +256,7 @@ export function PreBookingScreen() {
             <Field field={{ key: "bundleCount", label: "Bundle count", type: "number" }} value={form.bundleCount} onChange={set} />
             <Field field={{ key: "bundleType", label: "Bundle type", type: "select", options: ["Bundle", "Box", "CBM", "KG"] }} value={form.bundleType} onChange={set} />
           </div>
-          <Field field={{ key: "status", label: "Status", type: "select", options: ["Pending", "Collected"] }} value={form.status} onChange={set} />
+          <Field field={{ key: "status", label: "Status", type: "select", options: ["Pending", "Collected", "Canceled"], disabled: modalRow !== "new" && (preBookings.items.find((b) => b.id === modalRow)?.status === "Collected" || preBookings.items.find((b) => b.id === modalRow)?.status === "Canceled") }} value={form.status} onChange={set} />
           {(showBrandHandlingCharge || showPickupCharge) && (
             <div className="cc-grid-2">
               {showBrandHandlingCharge && (

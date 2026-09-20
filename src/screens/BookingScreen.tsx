@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { useCargoData } from "@/components/providers/CargoDataProvider";
 import { StatCard } from "@/components/ui/StatCard";
@@ -10,6 +11,7 @@ import { DataTable } from "@/components/ui/DataTable";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { Field } from "@/components/ui/Field";
+import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { ApiError } from "@/utils/apiClient";
 import { fmtDate, todayISO, toDateInputValue } from "@/utils/format";
@@ -18,12 +20,19 @@ import type { Booking } from "@/types";
 /** Create and track shipment bookings — the entry point of the whole cargo workflow. */
 export function BookingScreen() {
   const { bookings, senders, receivers, pickupPartners } = useCargoData();
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [modalRow, setModalRow] = useState<string | "new" | null>(null);
   const [form, setForm] = useState<Record<string, unknown>>({});
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const addCustomerFromSearch = (tab: "sender" | "receiver", typedName: string) => {
+    const params = new URLSearchParams({ tab, [tab === "sender" ? "newSender" : "newReceiver"]: "1" });
+    if (typedName) params.set(tab === "sender" ? "senderName" : "receiverName", typedName);
+    router.push(`/admin/customers?${params.toString()}`);
+  };
 
   const pickupOptions = [
     "Our Pickup Boy",
@@ -169,8 +178,23 @@ export function BookingScreen() {
           submitting={saving}
         >
           <div className="cc-grid-2">
-            <Field field={{ key: "sender", label: "Sender", type: "select", options: senders.items.map((s) => s.name) }} value={form.sender} onChange={set} />
-            <Field field={{ key: "receiver", label: "Receiver", type: "select", options: receivers.items.map((r) => r.name) }} value={form.receiver} onChange={set} />
+            <SearchableSelect
+              label="Sender"
+              value={(form.sender as string) ?? ""}
+              options={senders.items.map((s) => s.name)}
+              placeholder="Search sender"
+              onChange={(v) => set("sender", v)}
+              onCreateNew={(q) => addCustomerFromSearch("sender", q)}
+            />
+            <SearchableSelect
+              label="Receiver"
+              value={(form.receiver as string) ?? ""}
+              options={receivers.items.map((r) => r.name)}
+              placeholder="Search receiver"
+              createLabel="Add new receiver"
+              onChange={(v) => set("receiver", v)}
+              onCreateNew={(q) => addCustomerFromSearch("receiver", q)}
+            />
           </div>
           <Field field={{ key: "pickupOption", label: "Pick up via", type: "select", options: pickupOptions }} value={form.pickupOption} onChange={set} />
           <div className="cc-grid-2">
@@ -183,7 +207,7 @@ export function BookingScreen() {
           </div>
           <div className="cc-grid-2">
             <Field field={{ key: "productType", label: "Product type", type: "select", options: ["Branded", "Normal"] }} value={form.productType} onChange={set} />
-            <Field field={{ key: "repackingStatus", label: "Pack status", type: "select", options: ["Ready to Ship", "Repacking Required"] }} value={form.repackingStatus} onChange={set} />
+            <Field field={{ key: "repackingStatus", label: "Pack status", type: "select", options: ["Ready to Ship", "Repacking Required"], optionLabels: { "Repacking Required": "Package Ready" } }} value={form.repackingStatus} onChange={set} />
           </div>
           {(showBrandHandlingCharge || showPickupCharge || showBundleHandlingCharge) && (
             <div className="cc-grid-2">

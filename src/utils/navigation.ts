@@ -11,7 +11,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   LayoutDashboard, Users, UsersRound, Warehouse, Truck, Bike, Tags,
   ClipboardList, CalendarPlus, PackagePlus, PackageCheck, Boxes, Ship, ArrowRightLeft, PackageOpen,
-  FileText, Wallet, Receipt, BarChart3,
+  FileText, Wallet, Receipt, ReceiptText, BarChart3,
 } from "lucide-react";
 
 export interface NavItem {
@@ -44,7 +44,7 @@ export const NAV: NavGroup[] = [
       { href: "/admin/pickup-assign", label: "Pickup assign", icon: ClipboardList },
       { href: "/admin/pre-booking", label: "Pre-booking", icon: CalendarPlus },
       { href: "/admin/booking", label: "Booking", icon: PackagePlus },
-      { href: "/admin/ready-to-ship", label: "Packing ready", icon: PackageCheck },
+      { href: "/admin/ready-to-ship", label: "Package ready", icon: PackageCheck },
       { href: "/admin/repacking", label: "Repacking", icon: Boxes },
       { href: "/admin/containers", label: "Containers", icon: Ship },
       { href: "/admin/ready-to-stuff", label: "Ready to stuff", icon: PackageOpen },
@@ -57,6 +57,7 @@ export const NAV: NavGroup[] = [
       { href: "/admin/invoicing", label: "Invoicing", icon: FileText },
       { href: "/admin/credit-note", label: "Credit note", icon: Wallet },
       { href: "/admin/expenses", label: "Daily expense", icon: Receipt },
+      { href: "/admin/receipt-entry", label: "Receipt Entry", icon: ReceiptText },
     ],
   },
   { group: "Reports", items: [{ href: "/admin/reports", label: "Reports", icon: BarChart3 }] },
@@ -83,7 +84,7 @@ export const PAGE_TITLES: Record<string, [string, string]> = {
   "/admin/pickup-assign": ["Pickup assign", "Assign a transport and LR number to a collection run"],
   "/admin/pre-booking": ["Pre-booking", "Book a shipment in before the receiver is known"],
   "/admin/booking": ["Booking", "Create and track shipment bookings"],
-  "/admin/ready-to-ship": ["Packing ready", "Pack bundles and download the shipping list"],
+  "/admin/ready-to-ship": ["Package ready", "Pack bundles and download the shipping list"],
   "/admin/repacking": ["Repacking", "Repack bundles before they move to ready to ship"],
   "/admin/containers": ["Container management", "Track containers moving between Kochi and the UAE"],
   "/admin/ready-to-stuff": ["Ready to stuff", "Ready-to-ship bookings waiting to be loaded into a container"],
@@ -91,5 +92,6 @@ export const PAGE_TITLES: Record<string, [string, string]> = {
   "/admin/invoicing": ["Invoicing", "Generate invoices and delivery notes"],
   "/admin/credit-note": ["Credit note", "Petty cash fund, carried forward month to month"],
   "/admin/expenses": ["Daily expense", "Log day-to-day operational spends"],
+  "/admin/receipt-entry": ["Receipt Entry", "Record payments received from customers"],
   "/admin/reports": ["Reports", "Booking activity by month, container, country and customer"],
 };

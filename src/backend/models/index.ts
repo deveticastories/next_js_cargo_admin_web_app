@@ -10,6 +10,8 @@ export { Booking } from "@/backend/models/Booking";
 export { PreBooking } from "@/backend/models/PreBooking";
 export { Container } from "@/backend/models/Container";
 export { DailyExpense } from "@/backend/models/DailyExpense";
+export { Invoice } from "@/backend/models/Invoice";
+export { ReceiptEntry } from "@/backend/models/ReceiptEntry";
 export { CreditNote } from "@/backend/models/CreditNote";
 export { PackingList } from "@/backend/models/PackingList";
 export { Stuffing } from "@/backend/models/Stuffing";

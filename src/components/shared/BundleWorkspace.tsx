@@ -28,7 +28,9 @@ import { CheckCircle2, Download, Plus, Save, X } from "lucide-react";
 import type { Booking, BundleLineItem } from "@/types";
 import type { ApiCollection } from "@/utils/useApiCollection";
 import { api, ApiError } from "@/utils/apiClient";
-import { downloadText } from "@/utils/format";
+import { fmtDate } from "@/utils/format";
+import { downloadPackingListPdf } from "@/utils/pdf";
+import { useCargoData } from "@/components/providers/CargoDataProvider";
 import { colors } from "@/utils/colors";
 import { Button } from "@/components/ui/Button";
 import { DataTable } from "@/components/ui/DataTable";
@@ -94,6 +96,7 @@ export interface BundleWorkspaceProps {
 }
 
 export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
+  const { senders, receivers } = useCargoData();
   // The Booking ID dropdown's options — repack mode also excludes bookings already
   // repacked (Confirm has set `actualBundle` at least once). "Complete repacking, move
   // to ready to ship" is currently commented out, so `repackingStatus` alone never flips
@@ -129,6 +132,8 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [savedMessage, setSavedMessage] = useState("");
+  // Bundle numbers (per booking code) saved from the Ready to ship screen — what the Bundle dropdown locks.
+  const [readySavedBundles, setReadySavedBundles] = useState<Map<string, Set<number>>>(new Map());
   const [savedRows, setSavedRows] = useState<SavedItemRow[]>([]);
   const [loadingSavedRows, setLoadingSavedRows] = useState(false);
   // Ready mode's "Added items" table: this-session only, never written to the database on its own —
@@ -161,14 +166,19 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
   const loadSavedRows = async () => {
     setLoadingSavedRows(true);
     try {
-      const lists = await api.get<{ id: string; booking: string; bundleNumber: number; items: BundleLineItem[]; repackedBy?: string }[]>(
+      const lists = await api.get<{ id: string; booking: string; bundleNumber: number; items: BundleLineItem[]; repackedBy?: string; readySaved?: boolean }[]>(
         "/packing-lists"
       );
       const scopedBookings = new Map(savedListBookings.map((b) => [b.id, b]));
       const rows: SavedItemRow[] = [];
+      const readySaved = new Map<string, Set<number>>();
       for (const list of lists) {
         const forBooking = scopedBookings.get(list.booking);
         if (!forBooking) continue;
+        if (list.readySaved) {
+          if (!readySaved.has(forBooking.code)) readySaved.set(forBooking.code, new Set());
+          readySaved.get(forBooking.code)!.add(list.bundleNumber);
+        }
         list.items.forEach((item, index) => {
           // Skip a still-blank default row — nothing's actually been recorded for it yet.
           if (!item.product && !item.qty && !item.fabric && !item.description) return;
@@ -176,6 +186,7 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
         });
       }
       setSavedRows(rows);
+      setReadySavedBundles(readySaved);
     } catch {
       setSavedRows([]);
     } finally {
@@ -285,7 +296,7 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
     setSavedMessage("");
   };
 
-  const persistLines = () => api.post("/packing-lists", { bookingId, bundleNumber: Number(bundle), items: lines });
+  const persistLines = () => api.post("/packing-lists", { bookingId, bundleNumber: Number(bundle), items: lines, readySaved: true });
 
   /** Writes each given bundle to the database (used by both "Confirm" and "Complete repacking"). */
   const persistStagedBundles = async (bundlesToSave: { bundleNumber: number; items: BundleLineItem[] }[]) => {
@@ -344,6 +355,13 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
       setLines([emptyLine()]);
       // Hide the Packing list until another bundle is selected.
       setPackingListVisible(false);
+      // Move the picker on to the next bundle that still has no saved list (this one is now locked).
+      if (mode === "ready") {
+        const done = new Set(readySavedBundles.get(booking?.code ?? "") ?? []);
+        done.add(bundleNumber);
+        const next = bundleOptions.find((n) => !done.has(Number(n)));
+        if (next) setBundle(next);
+      }
       await loadSavedRows();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to save the packing list.");
@@ -389,33 +407,39 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
     }
   };
 
-  /**
-   * The Added items panel's "Download ready-to-ship list" button — downloads
-   * the this-session "Added items" grouped by bundle. Purely local: it neither
-   * reads from nor writes to the database.
-   */
-  const downloadAllBundles = async () => {
-    if (!bookingId) return;
-    setSaving(true);
+  /** "Download packing list" on both screens — the Added bundles (repack) / Added items (ready) rows as a PDF, grouped by bundle. */
+  const downloadPackingListAsPdf = async () => {
+    // Repack mode prints its staged bundles; ready mode prints the "Added items" rows grouped by bundle.
+    const source =
+      mode === "repack"
+        ? stagedBundles
+        : [...new Set(addedItems.map((r) => r.bundleNumber))].map((n) => ({
+            bundleNumber: n,
+            items: addedItems.filter((r) => r.bundleNumber === n),
+          }));
+    if (!booking || source.length === 0) return;
+    const partyOf = (name: string, kind: "sender" | "receiver") => {
+      const found = (kind === "sender" ? senders.items : receivers.items).find((p) => p.name === name);
+      return { name, lines: found ? [found.location, found.whatsapp ? `Ph: ${found.whatsapp}` : ""] : [] };
+    };
     setError("");
-    setSavedMessage("");
     try {
-      const bundleNumbers = [...new Set(addedItems.map((r) => r.bundleNumber))].sort((x, y) => x - y);
-      const sections = bundleNumbers.map((n) => {
-        const rows = addedItems
-          .filter((r) => r.bundleNumber === n)
-          .map((l) => `${l.product} | Qty ${l.qty} | ${l.fabric} | Net ${l.netWeight}kg | Gross ${l.grossWeight}kg | ${l.description}`)
-          .join("\n");
-        return `Bundle ${n}\n${rows}`;
+      await downloadPackingListPdf(`${booking.code}-packing-list.pdf`, {
+        lrNo: booking.code,
+        bookingDate: fmtDate(booking.date),
+        sender: partyOf(booking.sender, "sender"),
+        receiver: partyOf(booking.receiver, "receiver"),
+        bundles: [...source]
+          .sort((a, b) => a.bundleNumber - b.bundleNumber)
+          .map((b) => ({
+            bundleNo: b.bundleNumber,
+            items: b.items
+              .filter((i) => i.product || i.qty || i.fabric || i.description)
+              .map((i) => ({ product: [i.product, i.fabric].filter(Boolean).join(" - "), qty: i.qty })),
+          })),
       });
-      downloadText(
-        `${booking?.code ?? bookingId}-ready-to-ship.txt`,
-        `Ready to ship list\nBooking: ${booking?.code}\n\n${sections.join("\n\n")}`
-      );
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to download the ready-to-ship list.");
-    } finally {
-      setSaving(false);
+    } catch {
+      setError("Failed to generate the packing list PDF.");
     }
   };
 
@@ -453,6 +477,9 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
 
   const bundleCountOf = booking ? Number(booking.bundleCount || 1) : 0;
   const bundleOptions = Array.from({ length: bundleCountOf || 1 }, (_, i) => String(i + 1));
+  // Ready mode: bundles that already have a saved packing list — shown greyed out and can't be picked again.
+  const savedBundleNumbers = mode === "ready" && booking ? readySavedBundles.get(booking.code) : undefined;
+  const isBundleSaved = (n: string) => Boolean(savedBundleNumbers?.has(Number(n)));
 
   /**
    * Repack mode's "Added bundles" rows — a this-session staging area only, not
@@ -512,8 +539,9 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
               <label>Bundle</label>
               <select value={bundle} onChange={(e) => selectBundle(e.target.value)} disabled={!bookingId}>
                 {bundleOptions.map((n) => (
-                  <option key={n} value={n}>
+                  <option key={n} value={n} disabled={isBundleSaved(n) && n !== bundle} style={isBundleSaved(n) ? { color: "#9ca3af", opacity: 0.5 } : undefined}>
                     Bundle {n}
+                    {isBundleSaved(n) ? " (saved)" : ""}
                   </option>
                 ))}
               </select>
@@ -658,15 +686,24 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
                 : "Items saved for the selected booking, across its bundles — pick a bundle, save, pick the next, and it builds up here."}
             </div>
           </div>
+          {mode === "repack" && (
+            <Button
+              variant="primary"
+              onClick={downloadPackingListAsPdf}
+              disabled={!bookingId || stagedBundles.length === 0}
+              title={!bookingId ? "Choose a booking above first" : stagedBundles.length === 0 ? "Save a bundle above first" : "Download the added bundles as a PDF"}
+            >
+              <Download size={15} /> Download packing list
+            </Button>
+          )}
           {mode === "ready" && (
             <Button
               variant="primary"
-              onClick={downloadAllBundles}
-              loading={saving}
+              onClick={downloadPackingListAsPdf}
               disabled={!bookingId || addedItems.length === 0}
-              title={!bookingId ? "Choose a booking above first" : addedItems.length === 0 ? "Save a packing list above first" : "Download the added items"}
+              title={!bookingId ? "Choose a booking above first" : addedItems.length === 0 ? "Save a packing list above first" : "Download the added items as a PDF"}
             >
-              {!saving && <Download size={15} />} Download ready-to-ship list
+              <Download size={15} /> Download packing list
             </Button>
           )}
         </div>
