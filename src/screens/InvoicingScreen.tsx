@@ -24,6 +24,7 @@ export function InvoicingScreen() {
   const [containerId, setContainerId] = useState("");
   const [bookingId, setBookingId] = useState("");
   const [pickupCharge, setPickupCharge] = useState("0");
+  const [brandHandlingCharge, setBrandHandlingCharge] = useState("0");
   const [deliveryPartner, setDeliveryPartner] = useState("");
   const [dnBookingId, setDnBookingId] = useState("");
   const [packingRows, setPackingRows] = useState<(BundleLineItem & { bundleNumber: number })[]>([]);
@@ -46,7 +47,13 @@ export function InvoicingScreen() {
   const dp = deliveryPartners.items.find((d) => d.name === deliveryPartner);
   const deliveryCharge = dp ? Number(dp.charge) : 0;
   const showPickupCharge = booking?.billOption === "Without Bill";
-  const total = subtotal - discountAmt + (showPickupCharge ? Number(pickupCharge || 0) : 0) + deliveryCharge;
+  const showBrandHandlingCharge = booking?.productType === "Branded";
+  const total =
+    subtotal -
+    discountAmt +
+    (showPickupCharge ? Number(pickupCharge || 0) : 0) +
+    (showBrandHandlingCharge ? Number(brandHandlingCharge || 0) : 0) +
+    deliveryCharge;
 
   const partyOf = (name: string, kind: "sender" | "receiver"): { name: string; lines: string[] } => {
     const found = (kind === "sender" ? senders.items : receivers.items).find((p) => p.name === name);
@@ -79,7 +86,9 @@ export function InvoicingScreen() {
       bookingDate: fmtDate(booking.date),
       receiver: partyOf(booking.receiver, "receiver"),
       rows,
-      extraCharges: { withoutBill: showPickupCharge ? Number(pickupCharge || 0) : 0 },
+      extraCharges: {},
+      withoutBillPickupCharge: showPickupCharge ? Number(pickupCharge || 0) : undefined,
+      brandHandlingCharge: showBrandHandlingCharge ? Number(brandHandlingCharge || 0) : undefined,
       total,
     });
   };
@@ -154,6 +163,7 @@ export function InvoicingScreen() {
               setBookingId(picked?.id ?? "");
               // Pre-fill from the charge recorded at booking time, if any — still editable below.
               setPickupCharge(String(picked?.pickupCharge ?? 0));
+              setBrandHandlingCharge(String(picked?.brandHandlingCharge ?? 0));
             }}
           />
         )}
@@ -177,6 +187,13 @@ export function InvoicingScreen() {
             </div>
             {showPickupCharge && (
               <Field field={{ key: "pc", label: "Pickup charge (booked without bill)", type: "number" }} value={pickupCharge} onChange={(_, v) => setPickupCharge(v)} />
+            )}
+            {showBrandHandlingCharge && (
+              <Field
+                field={{ key: "bhc", label: "Brand handling charge (branded products)", type: "number" }}
+                value={brandHandlingCharge}
+                onChange={(_, v) => setBrandHandlingCharge(v)}
+              />
             )}
             <Field field={{ key: "dp", label: "Delivery partner", type: "select", options: deliveryPartners.items.map((d) => d.name) }} value={deliveryPartner} onChange={(_, v) => setDeliveryPartner(v)} />
             <div className="cc-total-row" style={{ fontWeight: 700, fontSize: 15 }}>

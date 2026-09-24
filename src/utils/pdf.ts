@@ -136,7 +136,11 @@ export interface InvoiceData {
   /** Numbered charge rows (freight, discount, delivery…). Rate/qty are left blank for rows that don't have them. */
   rows: { description: string; rate?: number; qty?: number; amount: number }[];
   /** Conditional extra-charge lines — printed with their condition, amount left blank when 0/undefined. */
-  extraCharges: { withoutBill?: number; brandHandling?: number; bundleHandling?: number; gccTransport?: number };
+  extraCharges: { bundleHandling?: number; gccTransport?: number };
+  /** Pickup charge for a booking made without bill — the "Without Bill" line is printed only when this is set. */
+  withoutBillPickupCharge?: number;
+  /** Brand handling charge for a "Branded" booking — the line is printed only when this is set. */
+  brandHandlingCharge?: number;
   total: number;
 }
 
@@ -183,8 +187,22 @@ export async function downloadInvoicePdf(filename: string, data: InvoiceData): P
     headStyles,
     body: [
       ...numbered,
-      extra("Without Bill Extra Charge", "applicable only if sent without bill", data.extraCharges.withoutBill),
-      extra("Brand Handling Charge", "applicable only for branded products", data.extraCharges.brandHandling),
+      ...(data.withoutBillPickupCharge !== undefined
+        ? [
+            [
+              { content: "Without Bill Extra Charge - Pickup Charge  (applicable only if sent without bill)", colSpan: 4, styles: { fontStyle: "italic" as const } },
+              pdfMoney(data.withoutBillPickupCharge),
+            ],
+          ]
+        : []),
+      ...(data.brandHandlingCharge !== undefined
+        ? [
+            [
+              { content: "Brand Handling Charge  (applicable only for branded products)", colSpan: 4, styles: { fontStyle: "italic" as const } },
+              pdfMoney(data.brandHandlingCharge),
+            ],
+          ]
+        : []),
       extra("Bundle Handling Charge", "applicable only if below 5 bundles", data.extraCharges.bundleHandling),
       extra("GCC Transport Charge", "applicable only for delivery outside UAE", data.extraCharges.gccTransport),
     ],
