@@ -17,22 +17,22 @@
 
 export const colors = {
   // Sidebar / dark surfaces
-  ink: "oklch(0.24 0.02 155)",
-  inkSoft: "oklch(0.30 0.025 155)",
-  inkLine: "oklch(0.34 0.02 155)",
+  ink: "oklch(0.24 0.035 228)",
+  inkSoft: "oklch(0.30 0.04 228)",
+  inkLine: "oklch(0.35 0.035 228)",
 
   // Brand green — primary buttons, links, active states
-  accent: "oklch(0.42 0.09 155)",
-  accentDark: "oklch(0.36 0.09 155)",
-  accentSoft: "oklch(0.95 0.03 155)",
+  accent: "oklch(0.50 0.095 228)",
+  accentDark: "oklch(0.42 0.09 228)",
+  accentSoft: "oklch(0.95 0.03 228)",
 
-  bg: "oklch(0.985 0.004 150)",
+  bg: "oklch(0.985 0.004 228)",
   surface: "#FFFFFF",
-  border: "oklch(0.92 0.008 155)",
+  border: "oklch(0.92 0.008 228)",
 
-  text: "oklch(0.24 0.012 155)",
-  textSoft: "oklch(0.52 0.012 155)",
-  textFaint: "oklch(0.65 0.012 155)",
+  text: "oklch(0.24 0.012 228)",
+  textSoft: "oklch(0.52 0.012 228)",
+  textFaint: "oklch(0.65 0.012 228)",
 
   success: "oklch(0.46 0.09 155)",
   successBg: "oklch(0.95 0.03 155)",
@@ -43,8 +43,8 @@ export const colors = {
   warn: "oklch(0.50 0.10 70)",
   warnBg: "oklch(0.96 0.04 80)",
 
-  info: "oklch(0.48 0.09 250)",
-  infoBg: "oklch(0.955 0.03 250)",
+  info: "oklch(0.48 0.10 285)",
+  infoBg: "oklch(0.955 0.03 285)",
 
   // Extra accent used sparingly (e.g. a "Superadmin"-style role pill)
   violet: "oklch(0.44 0.10 300)",
@@ -75,6 +75,7 @@ export const STATUS_STYLES: Record<string, StatusStyle> = {
   "Ready to Ship": { bg: colors.successBg, fg: colors.success },
   "Repacking Required": { bg: colors.warnBg, fg: colors.warn },
   Stuffed: { bg: colors.infoBg, fg: colors.info },
+  Added: { bg: colors.successBg, fg: colors.success },
   "With Bill": { bg: colors.infoBg, fg: colors.info },
   "Without Bill": { bg: colors.warnBg, fg: colors.warn },
   Paid: { bg: colors.successBg, fg: colors.success },

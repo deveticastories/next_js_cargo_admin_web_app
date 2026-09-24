@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Ship } from "lucide-react";
+import Image from "next/image";
 import { NAV } from "@/utils/navigation";
+import logoLight from "@/assets/images/logo-light.png";
 
 export interface SidebarProps {
   open: boolean;
@@ -19,13 +20,7 @@ export function Sidebar({ open, onNavigate, email }: SidebarProps) {
   return (
     <aside className={`cc-sidebar ${open ? "open" : ""}`}>
       <div className="cc-brand">
-        <div className="cc-brand-mark">
-          <Ship size={16} color="#fff" />
-        </div>
-        <div>
-          <div className="cc-brand-name cc-h">Cargo Admin</div>
-          <div className="cc-brand-sub">Kochi ⇄ UAE</div>
-        </div>
+        <Image src={logoLight} alt="Introlines Merchant Exports" className="cc-brand-logo" priority />
       </div>
       {NAV.map((group) => (
         <div key={group.group}>
@@ -49,7 +44,7 @@ export function Sidebar({ open, onNavigate, email }: SidebarProps) {
           <span style={{ fontSize: 13.5, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {email || "Admin"}
           </span>
-          <span className="cc-mono" style={{ fontSize: 11.5, color: "oklch(0.66 0.015 150)" }}>
+          <span className="cc-mono" style={{ fontSize: 11.5, color: "oklch(0.66 0.015 228)" }}>
             Superadmin
           </span>
         </div>

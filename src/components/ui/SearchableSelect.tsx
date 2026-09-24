@@ -9,10 +9,13 @@ export interface SearchableSelectProps {
   required?: boolean;
   value: string;
   options: string[];
+  /** Display text per option value — shown and searched in place of the raw value. */
+  optionLabels?: Record<string, string>;
+  disabled?: boolean;
   placeholder?: string;
   onChange: (value: string) => void;
-  /** Bottom-of-list action for when the option being searched for doesn't exist yet — receives whatever text is currently typed in the search box. */
-  onCreateNew: (query: string) => void;
+  /** Bottom-of-list action for when the option being searched for doesn't exist yet — receives whatever text is currently typed in the search box. Omit to hide the row. */
+  onCreateNew?: (query: string) => void;
   createLabel?: string;
 }
 
@@ -26,6 +29,8 @@ export function SearchableSelect({
   required,
   value,
   options,
+  optionLabels,
+  disabled,
   placeholder = "Search…",
   onChange,
   onCreateNew,
@@ -45,7 +50,8 @@ export function SearchableSelect({
     return () => document.removeEventListener("mousedown", onOutsideClick);
   }, [open]);
 
-  const filtered = options.filter((o) => o.toLowerCase().includes(query.toLowerCase()));
+  const labelOf = (option: string) => optionLabels?.[option] ?? option;
+  const filtered = options.filter((o) => labelOf(o).toLowerCase().includes(query.toLowerCase()));
 
   const openPanel = () => {
     setQuery("");
@@ -59,7 +65,7 @@ export function SearchableSelect({
   };
   const createNew = () => {
     setOpen(false);
-    onCreateNew(query.trim());
+    onCreateNew?.(query.trim());
   };
 
   return (
@@ -68,7 +74,7 @@ export function SearchableSelect({
         {label}
         {required ? " *" : ""}
       </label>
-      <div className="cc-searchselect-control" onClick={open ? undefined : openPanel}>
+      <div className="cc-searchselect-control" onClick={open || disabled ? undefined : openPanel} aria-disabled={disabled}>
         {open ? (
           <div className="cc-searchselect-input">
             <Search size={14} color={colors.textFaint} />
@@ -85,14 +91,14 @@ export function SearchableSelect({
             />
           </div>
         ) : (
-          <span className={value ? "" : "cc-searchselect-placeholder"}>{value || placeholder}</span>
+          <span className={value ? "" : "cc-searchselect-placeholder"}>{value ? labelOf(value) : placeholder}</span>
         )}
       </div>
       {open && (
         <div className="cc-searchselect-panel">
           <div className="cc-searchselect-list">
             {filtered.length === 0 ? (
-              <div className="cc-searchselect-empty">No sender matches &ldquo;{query}&rdquo;</div>
+              <div className="cc-searchselect-empty">No {label.toLowerCase()} matches &ldquo;{query}&rdquo;</div>
             ) : (
               filtered.map((option) => (
                 <div
@@ -100,15 +106,17 @@ export function SearchableSelect({
                   className={`cc-searchselect-option ${option === value ? "active" : ""}`}
                   onClick={() => select(option)}
                 >
-                  {option}
+                  {labelOf(option)}
                 </div>
               ))
             )}
           </div>
-          <div className="cc-searchselect-create" onClick={createNew}>
-            <UserPlus size={14} /> {createLabel}
-            {query.trim() ? ` "${query.trim()}"` : ""}
-          </div>
+          {onCreateNew && (
+            <div className="cc-searchselect-create" onClick={createNew}>
+              <UserPlus size={14} /> {createLabel}
+              {query.trim() ? ` "${query.trim()}"` : ""}
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -9,7 +9,7 @@
 
 import type { LucideIcon } from "lucide-react";
 import {
-  LayoutDashboard, Users, UsersRound, Warehouse, Truck, Bike, Tags,
+  LayoutDashboard, Users, UsersRound, Warehouse, Globe, Truck, Bike, Tags,
   ClipboardList, CalendarPlus, PackagePlus, PackageCheck, Boxes, Ship, ArrowRightLeft, PackageOpen,
   FileText, Wallet, Receipt, ReceiptText, BarChart3,
 } from "lucide-react";
@@ -33,6 +33,7 @@ export const NAV: NavGroup[] = [
       { href: "/admin/team", label: "Team", icon: Users },
       { href: "/admin/customers", label: "Customers", icon: UsersRound },
       { href: "/admin/stores", label: "Stores", icon: Warehouse },
+      { href: "/admin/country", label: "Country", icon: Globe },
       { href: "/admin/delivery-partners", label: "Delivery partners", icon: Truck },
       { href: "/admin/pickup-partners", label: "Pickup partners", icon: Bike },
       { href: "/admin/pricing", label: "Pricing", icon: Tags },
@@ -78,6 +79,7 @@ export const PAGE_TITLES: Record<string, [string, string]> = {
   "/admin/team": ["Team", "Admins and employees who use this admin panel"],
   "/admin/customers": ["Customers", "Senders who book shipments and receivers who collect them"],
   "/admin/stores": ["Stores", "Kochi and UAE store locations"],
+  "/admin/country": ["Country", "Countries used for delivery partners' From/To routes"],
   "/admin/delivery-partners": ["Delivery partners", "Last-mile delivery vendors at the receiving end"],
   "/admin/pickup-partners": ["Pickup partners", "Third-party partners who collect bundles from senders"],
   "/admin/pricing": ["Pricing", "Route-wise price per unit of measure"],

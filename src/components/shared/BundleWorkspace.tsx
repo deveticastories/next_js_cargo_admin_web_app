@@ -36,6 +36,7 @@ import { Button } from "@/components/ui/Button";
 import { DataTable } from "@/components/ui/DataTable";
 import { Field } from "@/components/ui/Field";
 import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SearchableSelect } from "@/components/ui/SearchableSelect";
 
 /** One flattened row of a ready-to-ship packing-list table (both "Added items" and "Saved packing lists"). */
 interface SavedItemRow extends BundleLineItem {
@@ -94,6 +95,8 @@ export interface BundleWorkspaceProps {
   mode: "ready" | "repack";
   bookings: ApiCollection<Booking>;
 }
+
+const bookingLabel = (b?: Booking) => (b ? `${b.code} — ${b.sender} → ${b.receiver}` : "");
 
 export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
   const { senders, receivers } = useCargoData();
@@ -256,6 +259,13 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
     setAddedItems([]);
   };
   const selectBundle = async (n: string) => {
+    if (!n) {
+      // Placeholder ("Choose a bundle") — nothing selected yet.
+      setBundle("");
+      setPackingListVisible(false);
+      setSavedMessage("");
+      return;
+    }
     // Ready mode hides the Packing list after Save — picking a bundle brings it back.
     setPackingListVisible(true);
     setBundle(n);
@@ -355,13 +365,11 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
       setLines([emptyLine()]);
       // Hide the Packing list until another bundle is selected.
       setPackingListVisible(false);
-      // Move the picker on to the next bundle that still has no saved list (this one is now locked).
-      if (mode === "ready") {
-        const done = new Set(readySavedBundles.get(booking?.code ?? "") ?? []);
-        done.add(bundleNumber);
-        const next = bundleOptions.find((n) => !done.has(Number(n)));
-        if (next) setBundle(next);
-      }
+      // Reset the Bundle dropdown back to its placeholder rather than pre-selecting the next
+      // unsaved bundle: since the <select>'s value wouldn't actually change, picking that same
+      // bundle again fires no onChange event, so the fields would never reappear — most
+      // noticeably on the last remaining bundle, where there's no other value to pick first.
+      setBundle("");
       await loadSavedRows();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to save the packing list.");
@@ -505,17 +513,16 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
     <>
       <div className="cc-card" style={{ padding: 18 }}>
         <div className="cc-grid-2" style={{ marginBottom: 16 }}>
-          <div className="cc-field">
-            <label>Booking ID</label>
-            <select value={bookingId} onChange={(e) => selectBooking(e.target.value)}>
-              <option value="">Choose a booking</option>
-              {eligible.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.code} — {b.sender} → {b.receiver}
-                </option>
-              ))}
-            </select>
-          </div>
+          <SearchableSelect
+            label="Booking ID"
+            placeholder="Choose a booking"
+            value={bookingLabel(bookings.items.find((b) => b.id === bookingId))}
+            options={eligible.map(bookingLabel)}
+            onChange={(label) => {
+              const picked = eligible.find((b) => bookingLabel(b) === label);
+              if (picked) selectBooking(picked.id);
+            }}
+          />
           {mode === "repack" ? (
             <div className="cc-field">
               <label>Actual bundle</label>
@@ -538,6 +545,7 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
             <div className="cc-field">
               <label>Bundle</label>
               <select value={bundle} onChange={(e) => selectBundle(e.target.value)} disabled={!bookingId}>
+                <option value="">Choose a bundle</option>
                 {bundleOptions.map((n) => (
                   <option key={n} value={n} disabled={isBundleSaved(n) && n !== bundle} style={isBundleSaved(n) ? { color: "#9ca3af", opacity: 0.5 } : undefined}>
                     Bundle {n}

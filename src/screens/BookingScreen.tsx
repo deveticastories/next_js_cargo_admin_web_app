@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { useCargoData } from "@/components/providers/CargoDataProvider";
@@ -13,7 +13,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Field } from "@/components/ui/Field";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { SkeletonTable } from "@/components/ui/Skeleton";
-import { ApiError } from "@/utils/apiClient";
+import { ApiError, api } from "@/utils/apiClient";
 import { fmtDate, todayISO, toDateInputValue } from "@/utils/format";
 import type { Booking } from "@/types";
 
@@ -27,6 +27,38 @@ export function BookingScreen() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // Bundle numbers whose packing list was saved (Package ready or Repacking), per booking id.
+  const [listedByBooking, setListedByBooking] = useState<Map<string, Set<number>>>(new Map());
+  const [loadingLists, setLoadingLists] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get<{ booking: string; bundleNumber: number; readySaved?: boolean; repackedBy?: string }[]>("/packing-lists")
+      .then((lists) => {
+        if (cancelled) return;
+        const map = new Map<string, Set<number>>();
+        for (const l of lists) {
+          if (!l.readySaved && !l.repackedBy) continue;
+          if (!map.has(l.booking)) map.set(l.booking, new Set());
+          map.get(l.booking)!.add(l.bundleNumber);
+        }
+        setListedByBooking(map);
+      })
+      .catch(() => {
+        if (!cancelled) setListedByBooking(new Map());
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingLists(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // "Added" once every bundle of the booking has a saved packing list.
+  const packageListAdded = (b: Booking) =>
+    (listedByBooking.get(b.id)?.size ?? 0) >= Math.max(1, b.actualBundle || b.bundleCount || 1);
 
   const addCustomerFromSearch = (tab: "sender" | "receiver", typedName: string) => {
     const params = new URLSearchParams({ tab, [tab === "sender" ? "newSender" : "newReceiver"]: "1" });
@@ -150,21 +182,23 @@ export function BookingScreen() {
               { key: "sender", label: "Sender" },
               { key: "receiver", label: "Receiver" },
               { key: "date", label: "Date", render: (r) => fmtDate(r.date) },
-              { key: "bundleCount", label: "Bundles" },
+              { key: "bundleCount", label: "Actual bundle" },
               // Set by the Repacking screen's "Confirm" action, not the booking form — 0/"—" until repacking's been confirmed once.
-              { key: "actualBundle", label: "Actual bundle", render: (r) => (r.actualBundle ? r.actualBundle : "—") },
+              { key: "actualBundle", label: "Bundle", render: (r) => (r.actualBundle ? r.actualBundle : "—") },
               { key: "bundleType", label: "Bundle type" },
               { key: "productType", label: "Product type" },
               { key: "billOption", label: "Bill", render: (r) => <Badge value={r.billOption} /> },
               { key: "repackingStatus", label: "Pack status", render: (r) => <Badge value={r.repackingStatus} label={r.repackingStatus === "Ready to Ship" ? "Package Ready" : undefined} /> },
-              { key: "stuffed", label: "Stuffed", render: (r) => (r.stuffed ? <Badge value="Stuffed" /> : "—") },
-              { key: "status", label: "Status", render: (r) => <Badge value={r.status} /> },
+              { key: "packageListStatus", label: "Package list status", render: (r) => (loadingLists ? "…" : packageListAdded(r) ? <Badge value="Added" /> : "—") },
+              { key: "status", label: "Status", render: (r) => <Badge value={r.stuffed ? "Stuffed" : "Pending"} /> },
             ]}
             rows={filtered}
             onEdit={openEdit}
             onDelete={removeBooking}
             // Once a booking has been marked Ready to Ship or repacked, it's part of the downstream workflow.
             canDelete={(r) => r.repackingStatus !== "Ready to Ship" && !r.actualBundle}
+            // Edit follows the same rule as delete — hidden whenever the delete icon is.
+            canEdit={(r) => r.repackingStatus !== "Ready to Ship" && !r.actualBundle}
             busyRowId={deletingId}
           />
         )}

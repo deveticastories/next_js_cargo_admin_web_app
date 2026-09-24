@@ -221,7 +221,8 @@ export function ReceiptEntryScreen() {
             field={{
               key: "invoiceNo",
               label: "Invoice number",
-              type: "select",
+              type: "search-select",
+              placeholder: "Choose invoice number",
               required: true,
               options: invoiceChoices.map((i) => i.code),
               optionLabels: Object.fromEntries(invoiceChoices.map((i) => [i.code, `${i.code} · ${i.bookingCode}`])),

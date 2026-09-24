@@ -8,6 +8,8 @@ const invoiceSchema = new Schema(
     bookingCode: { type: String, required: true, trim: true, unique: true },
     sender: { type: String, trim: true },
     receiver: { type: String, trim: true },
+    /** Code of the stuffed container picked on the Invoicing screen. */
+    container: { type: String, trim: true, default: "" },
     /** Final invoice total, including any pickup and delivery charge. */
     amount: { type: Number, required: true, min: 0 },
     /** Delivery partner picked when the invoice was generated, and what they're owed. */
@@ -21,7 +23,7 @@ const invoiceSchema = new Schema(
 withCode(invoiceSchema, "INV");
 
 // In dev, hot reload keeps a model compiled from the old schema alive — drop it and re-register.
-if (models.Invoice && !models.Invoice.schema.path("deliveryPaymentStatus")) {
+if (models.Invoice && (!models.Invoice.schema.path("deliveryPaymentStatus") || !models.Invoice.schema.path("container"))) {
   mongoose.deleteModel("Invoice");
 }
 

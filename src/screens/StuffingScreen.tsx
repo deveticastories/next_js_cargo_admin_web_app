@@ -13,6 +13,7 @@ import { useCargoData } from "@/components/providers/CargoDataProvider";
 import { Button } from "@/components/ui/Button";
 import { DataTable } from "@/components/ui/DataTable";
 import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SearchBar } from "@/components/ui/SearchBar";
 import { api, ApiError } from "@/utils/apiClient";
 import { downloadText, fmtDate } from "@/utils/format";
 import type { Booking } from "@/types";
@@ -26,12 +27,15 @@ interface StuffingSummary {
 export function StuffingScreen() {
   const { bookings, containers, uaeStoreLog } = useCargoData();
   const [containerId, setContainerId] = useState("");
+  const [bookingQuery, setBookingQuery] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [lastSummary, setLastSummary] = useState<StuffingSummary | null>(null);
 
   const eligible = bookings.items.filter((b) => b.repackingStatus === "Ready to Ship" && !b.stuffed);
+  const q = bookingQuery.trim().toLowerCase();
+  const visible = eligible.filter((b) => [b.code, b.sender, b.receiver].some((v) => v.toLowerCase().includes(q)));
   const toggle = (id: string) => setSelected(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
 
   const submit = async () => {
@@ -76,7 +80,10 @@ export function StuffingScreen() {
             ))}
           </select>
         </div>
-        <div className="cc-mini-label">Ready-to-ship bookings available for stuffing</div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div className="cc-mini-label">Ready-to-ship bookings available for stuffing</div>
+          <SearchBar value={bookingQuery} onChange={setBookingQuery} placeholder="Search booking ID, sender, receiver" />
+        </div>
         {error && <div className="cc-alert-error" style={{ marginBottom: 12 }}>{error}</div>}
         {bookings.loading ? (
           <SkeletonTable columns={5} rows={3} />
@@ -95,7 +102,14 @@ export function StuffingScreen() {
                 </tr>
               </thead>
               <tbody>
-                {eligible.map((b) => (
+                {visible.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="cc-empty">
+                      No bookings match &ldquo;{bookingQuery}&rdquo;
+                    </td>
+                  </tr>
+                )}
+                {visible.map((b) => (
                   <tr key={b.id}>
                     <td>
                       <input type="checkbox" checked={selected.includes(b.id)} onChange={() => toggle(b.id)} />

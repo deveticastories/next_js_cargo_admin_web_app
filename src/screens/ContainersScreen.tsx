@@ -21,6 +21,7 @@ export function ContainersScreen() {
         { key: "etaUae", label: "ETA UAE", type: "date" },
       ]}
       columns={[
+        { key: "code", label: "Container ID" },
         { key: "company", label: "Company" },
         { key: "stuffingDate", label: "Stuffing", render: (r) => fmtDate(r.stuffingDate) },
         { key: "cutOffDate", label: "Cut-off", render: (r) => fmtDate(r.cutOffDate) },

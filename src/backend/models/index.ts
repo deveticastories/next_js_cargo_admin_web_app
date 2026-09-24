@@ -2,6 +2,7 @@ export { Employee } from "@/backend/models/Employee";
 export { Sender } from "@/backend/models/Sender";
 export { Receiver } from "@/backend/models/Receiver";
 export { Store } from "@/backend/models/Store";
+export { Country } from "@/backend/models/Country";
 export { DeliveryPartner } from "@/backend/models/DeliveryPartner";
 export { PickupPartner } from "@/backend/models/PickupPartner";
 export { PricingRoute } from "@/backend/models/PricingRoute";

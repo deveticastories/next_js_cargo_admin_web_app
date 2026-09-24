@@ -12,6 +12,7 @@ import { createContext, useContext, type ReactNode } from "react";
 import type {
   Booking,
   Container,
+  Country,
   CreditNoteEntry,
   DailyExpense,
   DeliveryPartner,
@@ -35,6 +36,7 @@ export interface CargoData {
   senders: ApiCollection<Sender>;
   receivers: ApiCollection<Receiver>;
   stores: ApiCollection<Store>;
+  countries: ApiCollection<Country>;
   deliveryPartners: ApiCollection<DeliveryPartner>;
   pickupPartners: ApiCollection<PickupPartner>;
   pricing: ApiCollection<PricingRoute>;
@@ -58,6 +60,7 @@ export function CargoDataProvider({ children }: { children: ReactNode }) {
     senders: useApiCollection<Sender>("/senders"),
     receivers: useApiCollection<Receiver>("/receivers"),
     stores: useApiCollection<Store>("/stores"),
+    countries: useApiCollection<Country>("/countries"),
     deliveryPartners: useApiCollection<DeliveryPartner>("/delivery-partners"),
     pickupPartners: useApiCollection<PickupPartner>("/pickup-partners"),
     pricing: useApiCollection<PricingRoute>("/pricing"),

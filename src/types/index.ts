@@ -67,6 +67,11 @@ export interface Store extends BaseRecord {
   inCharge: string;
 }
 
+/** A country usable as a delivery partner's From/To route endpoint. */
+export interface Country extends BaseRecord {
+  name: string;
+}
+
 export interface DeliveryPartner extends BaseRecord {
   name: string;
   whatsapp: string;
@@ -184,6 +189,8 @@ export interface Invoice {
   bookingCode: string;
   sender?: string;
   receiver?: string;
+  /** Code of the (stuffed) container picked when the invoice was generated. */
+  container?: string;
   amount: number;
   deliveryPartner?: string;
   deliveryCharge?: number;
@@ -256,7 +263,7 @@ export interface UaeStoreLogEntry {
 /* Generic UI config types (used by Field, DataTable, MasterView)          */
 /* ---------------------------------------------------------------------- */
 
-export type FieldType = "text" | "email" | "password" | "number" | "date" | "select" | "textarea";
+export type FieldType = "text" | "email" | "password" | "number" | "date" | "select" | "textarea" | "search-select";
 
 export interface FieldConfig {
   key: string;
@@ -268,6 +275,10 @@ export interface FieldConfig {
   placeholder?: string;
   /** Renders the input read-only — for a value the form computes rather than the user types. */
   disabled?: boolean;
+  /** For type "search-select": label on the bottom "Add new X" row, e.g. "Add new country". */
+  createLabel?: string;
+  /** For type "search-select": called with the currently typed search text when "Add new" is clicked. */
+  onCreateNew?: (query: string) => void;
 }
 
 export interface ColumnConfig<T> {

@@ -1,12 +1,24 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCargoData } from "@/components/providers/CargoDataProvider";
 import { MasterView } from "@/components/shared/MasterView";
 import { money } from "@/utils/format";
 
 /** Last-mile delivery vendors at the receiving end. */
 export function DeliveryPartnersScreen() {
-  const { deliveryPartners } = useCargoData();
+  const { deliveryPartners, countries } = useCargoData();
+  const router = useRouter();
+
+  // Lets the From/To country search's "Add new country" row deep-link
+  // straight into the Country screen's "add a new country" shortcut.
+  const addCountryFromSearch = (typedName: string) => {
+    const params = new URLSearchParams({ new: "1" });
+    if (typedName) params.set("name", typedName);
+    router.push(`/admin/country?${params.toString()}`);
+  };
+
+  const countryOptions = countries.items.map((c) => c.name);
 
   return (
     <MasterView
@@ -15,8 +27,24 @@ export function DeliveryPartnersScreen() {
       fields={[
         { key: "name", label: "Name", required: true },
         { key: "whatsapp", label: "WhatsApp number", required: true },
-        { key: "from", label: "From" },
-        { key: "toCountry", label: "To country" },
+        {
+          key: "from",
+          label: "From country",
+          type: "search-select",
+          options: countryOptions,
+          placeholder: "Search country",
+          createLabel: "Add new country",
+          onCreateNew: addCountryFromSearch,
+        },
+        {
+          key: "toCountry",
+          label: "To country",
+          type: "search-select",
+          options: countryOptions,
+          placeholder: "Search country",
+          createLabel: "Add new country",
+          onCreateNew: addCountryFromSearch,
+        },
         { key: "charge", label: "Delivery charge", type: "number" },
       ]}
       columns={[

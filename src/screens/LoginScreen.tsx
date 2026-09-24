@@ -2,9 +2,11 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Ship } from "lucide-react";
+import Image from "next/image";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
+import logoLight from "@/assets/images/logo-light.png";
+import logoTrimmed from "@/assets/images/logo-trimmed.png";
 import { api, ApiError } from "@/utils/apiClient";
 
 /**
@@ -46,10 +48,7 @@ export function LoginScreen() {
     <div className="cc-root cc-login">
       <div className="cc-login-panel">
         <div className="cc-login-brand">
-          <div className="cc-brand-mark">
-            <Ship size={16} color="#fff" />
-          </div>
-          <span className="cc-brand-name cc-h">Cargo Admin</span>
+          <Image src={logoLight} alt="Introlines Merchant Exports" className="cc-login-logo" priority />
         </div>
 
         <div>
@@ -70,6 +69,7 @@ export function LoginScreen() {
 
       <div className="cc-login-form-wrap">
         <form className="cc-login-form" onSubmit={submit}>
+          <Image src={logoTrimmed} alt="Introlines Merchant Exports" className="cc-login-logo-mobile" priority />
           <div>
             <div className="cc-login-eyebrow">Sign in</div>
             <h2 className="cc-login-title cc-h">Welcome back</h2>

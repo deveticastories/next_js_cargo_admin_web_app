@@ -14,12 +14,14 @@ import { fmtDate, money, todayISO } from "@/utils/format";
 
 /** Petty cash fund — every entry adds to a balance that carries forward automatically. */
 export function CreditNoteScreen() {
-  const { creditNotes } = useCargoData();
+  const { creditNotes, dailyExpenses } = useCargoData();
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState<{ amount?: string; description?: string }>({});
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const balance = creditNotes.items.reduce((sum, c) => sum + Number(c.amount || 0), 0);
+  const totalExpenses = dailyExpenses.items.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+  const remainingBalance = balance - totalExpenses;
 
   const save = async () => {
     if (!form.amount) {
@@ -43,6 +45,7 @@ export function CreditNoteScreen() {
     <div>
       <div className="cc-stat-grid">
         <StatCard label="Petty cash balance" value={money(balance)} note="Carries forward automatically to next month" />
+        <StatCard label="Balance after expenses" value={money(remainingBalance)} note="Petty cash balance minus daily expenses" />
       </div>
       <div className="cc-card">
         <div className="cc-panel-head">
