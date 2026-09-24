@@ -28,6 +28,26 @@ function isDuplicateKeyError(err: unknown): boolean {
 }
 
 /**
+ * The database is unreachable or the connection dropped mid-request — a temporary
+ * condition, so it's reported as 503 (which the frontend's API client retries) rather
+ * than a generic 500.
+ */
+function isDatabaseUnavailableError(err: unknown): boolean {
+  if (typeof err !== "object" || err === null) return false;
+  const name = (err as { name?: unknown }).name;
+  const message = String((err as { message?: unknown }).message ?? "");
+  return (
+    name === "MongooseServerSelectionError" ||
+    name === "MongoServerSelectionError" ||
+    name === "MongoNetworkError" ||
+    name === "MongoNetworkTimeoutError" ||
+    name === "MongoNotConnectedError" ||
+    name === "MongoPoolClearedError" ||
+    /buffering timed out|ECONNRESET|ETIMEDOUT|connection .* closed/i.test(message)
+  );
+}
+
+/**
  * Wraps a route handler so every error it throws — an explicit `HttpError`,
  * a Mongoose validation failure, a duplicate-key write, or anything
  * unexpected — becomes a clean JSON response instead of a raw stack trace.
@@ -44,6 +64,11 @@ export function withErrorHandling<Args extends unknown[]>(
       if (err instanceof HttpError) return jsonError(err.message, err.status);
       if (err instanceof mongoose.Error.ValidationError) return jsonError(err.message, 400);
       if (isDuplicateKeyError(err)) return jsonError("A record with these values already exists.", 409);
+      if (err instanceof mongoose.Error.CastError) return jsonError("Invalid id.", 400);
+      if (isDatabaseUnavailableError(err)) {
+        console.error("[db unavailable]", err);
+        return jsonError("The server is having trouble reaching the database. Please try again in a moment.", 503);
+      }
       console.error(err);
       return jsonError("Unexpected server error.", 500);
     }

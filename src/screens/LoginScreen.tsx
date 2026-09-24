@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
@@ -17,7 +17,6 @@ import { api, ApiError } from "@/utils/apiClient";
  * originally headed (`?from=`, set by `src/proxy.ts`) or `/admin`.
  */
 export function LoginScreen() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -35,9 +34,14 @@ export function LoginScreen() {
     setError("");
     try {
       await api.post("/auth/login", { email: email.trim(), password });
-      const destination = searchParams.get("from") || "/admin";
-      router.replace(destination);
-      router.refresh();
+      const from = searchParams.get("from");
+      // Only follow same-site paths — never an absolute or protocol-relative URL.
+      const destination = from && from.startsWith("/") && !from.startsWith("//") ? from : "/admin";
+      // A full page load, not `router.replace()`: the client router may still hold the
+      // pre-login "/admin → /login" redirect in its cache, which is why the dashboard
+      // sometimes only appeared after a manual refresh. A real navigation always sends
+      // the new cookies through `src/proxy.ts` and starts `/admin` with fresh state.
+      window.location.replace(destination);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong. Please try again.");
       setSubmitting(false);

@@ -131,7 +131,6 @@ export function ReceiptEntryScreen() {
             </Button>
           </div>
         </div>
-        {receiptEntries.error && <div className="cc-alert-error" style={{ margin: "14px 18px 0" }}>{receiptEntries.error}</div>}
         {receiptEntries.loading ? (
           <SkeletonTable columns={8} />
         ) : (

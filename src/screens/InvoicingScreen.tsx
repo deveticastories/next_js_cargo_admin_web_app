@@ -21,18 +21,21 @@ import type { BundleLineItem } from "@/types";
 
 export function InvoicingScreen() {
   const { bookings, senders, receivers, pricing, deliveryPartners, invoices, containers, stuffings } = useCargoData();
-  const [bookingId, setBookingId] = useState("");
   const [containerId, setContainerId] = useState("");
+  const [bookingId, setBookingId] = useState("");
   const [pickupCharge, setPickupCharge] = useState("0");
   const [deliveryPartner, setDeliveryPartner] = useState("");
   const [dnBookingId, setDnBookingId] = useState("");
   const [packingRows, setPackingRows] = useState<(BundleLineItem & { bundleNumber: number })[]>([]);
   const [loadingPackingList, setLoadingPackingList] = useState(false);
 
-  const booking = bookings.items.find((b) => b.id === bookingId);
   // Only containers that have had at least one stuffing recorded against them.
   const stuffedContainers = containers.items.filter((c) => stuffings.items.some((s) => s.container === c.id));
   const container = stuffedContainers.find((c) => c.id === containerId);
+  // Bookings stuffed into the selected container.
+  const containerBookingIds = new Set(stuffings.items.filter((s) => s.container === containerId).flatMap((s) => s.bookings));
+  const containerBookings = bookings.items.filter((b) => containerBookingIds.has(b.id));
+  const booking = containerBookings.find((b) => b.id === bookingId);
   const receiver = receivers.items.find((r) => r.name === booking?.receiver);
   const route = pricing.items.find((p) => p.to === receiver?.location || p.to === receiver?.country);
   const unitPrice = route ? Number(route.price) : 0;
@@ -135,25 +138,27 @@ export function InvoicingScreen() {
           Price and discount are fetched automatically from the receiver&apos;s route.
         </div>
         <Field
-          field={{ key: "b", label: "Booking ID", type: "search-select", placeholder: "Choose booking ID", options: bookings.items.map((b) => b.code) }}
-          value={booking?.code ?? ""}
+          field={{ key: "c", label: "Container", type: "select", options: stuffedContainers.map((c) => c.code) }}
+          value={container?.code ?? ""}
           onChange={(_, code) => {
-            const picked = bookings.items.find((b) => b.code === code);
-            setBookingId(picked?.id ?? "");
-            // Default to the container this booking was stuffed into, if any.
-            const stuffedIn = picked ? stuffings.items.find((s) => s.bookings.includes(picked.id))?.container : undefined;
-            setContainerId(stuffedIn ?? "");
-            // Pre-fill from the charge recorded at booking time, if any — still editable below.
-            setPickupCharge(String(picked?.pickupCharge ?? 0));
+            setContainerId(stuffedContainers.find((c) => c.code === code)?.id ?? "");
+            setBookingId("");
           }}
         />
+        {container && (
+          <Field
+            field={{ key: "b", label: "Booking ID", type: "search-select", placeholder: "Choose booking ID", options: containerBookings.map((b) => b.code) }}
+            value={booking?.code ?? ""}
+            onChange={(_, code) => {
+              const picked = containerBookings.find((b) => b.code === code);
+              setBookingId(picked?.id ?? "");
+              // Pre-fill from the charge recorded at booking time, if any — still editable below.
+              setPickupCharge(String(picked?.pickupCharge ?? 0));
+            }}
+          />
+        )}
         {booking && (
           <>
-            <Field
-              field={{ key: "c", label: "Container", type: "select", options: stuffedContainers.map((c) => c.code) }}
-              value={container?.code ?? ""}
-              onChange={(_, code) => setContainerId(stuffedContainers.find((c) => c.code === code)?.id ?? "")}
-            />
             <div style={{ margin: "12px 0" }}>
               <div className="cc-total-row">
                 <span>Route price ({route ? `${route.from} → ${route.to}` : "no route matched"})</span>

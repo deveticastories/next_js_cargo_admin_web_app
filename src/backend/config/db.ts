@@ -24,8 +24,13 @@ const globalForMongoose = globalThis as typeof globalThis & { _mongooseCache?: M
 const cache: MongooseCache = globalForMongoose._mongooseCache ?? { conn: null, promise: null };
 globalForMongoose._mongooseCache = cache;
 
+// How long a query waits for a dropped connection to come back before failing (see `bufferCommands`).
+mongoose.set("bufferTimeoutMS", 15_000);
+
 export async function connectDB(): Promise<typeof mongoose> {
-  if (cache.conn) return cache.conn;
+  // readyState 1 = connected. A cached connection that has since dropped (Atlas failover,
+  // network blip, idle socket closed) falls through and waits for a live connection again.
+  if (cache.conn && mongoose.connection.readyState === 1) return cache.conn;
 
   const uri = process.env.MONGODB_URI;
   if (!uri) {
@@ -33,7 +38,21 @@ export async function connectDB(): Promise<typeof mongoose> {
   }
 
   if (!cache.promise) {
-    cache.promise = mongoose.connect(uri, { bufferCommands: false });
+    cache.promise = mongoose.connect(uri, {
+      // Queries issued while the driver is reconnecting wait (up to `bufferTimeoutMS`) for the
+      // connection to come back instead of failing immediately — a brief Atlas blip no longer
+      // turns into a "failed to load" error on screen. (Wait limit: `bufferTimeoutMS` above.)
+      bufferCommands: true,
+      // Fail fast (instead of Mongoose's 30s default) if Atlas is unreachable, so a
+      // request shows an error rather than spinning for half a minute.
+      serverSelectionTimeoutMS: 10_000,
+      // Kill a query stuck on a dead socket instead of letting the request hang forever.
+      socketTimeoutMS: 45_000,
+      maxPoolSize: 20,
+      // Prefer IPv4 — on some networks the IPv6 attempt to Atlas hangs before falling back,
+      // which is a common cause of slow first connections.
+      family: 4,
+    });
   }
 
   try {
@@ -41,8 +60,11 @@ export async function connectDB(): Promise<typeof mongoose> {
   } catch (err) {
     // Let the next call retry instead of permanently caching a failed connection attempt.
     cache.promise = null;
+    cache.conn = null;
     throw err;
   }
 
+  // Connected once but currently reconnecting: the driver reconnects on its own, and with
+  // buffering on, the caller's queries simply wait for it.
   return cache.conn;
 }

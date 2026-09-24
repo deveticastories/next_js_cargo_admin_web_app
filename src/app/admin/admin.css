@@ -1168,3 +1168,30 @@ table.cc-table tr:hover td {
 @media (max-width: 900px) {
   .cc-login-logo-mobile { display: block; }
 }
+
+/** Same shape as `.cc-alert-error`, for "still working" notices that aren't failures. */
+.cc-alert-warn {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  background: var(--warn-bg);
+  border: 1px solid oklch(0.88 0.06 80);
+  color: var(--warn);
+  border-radius: 10px;
+  padding: 11px 13px;
+  font-size: 13px;
+  line-height: 1.45;
+  animation: cc-fade-in 0.18s ease;
+}
+/** `DataStatusBanner` — sits above the page head on every admin screen. */
+.cc-data-banner {
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.cc-data-banner .cc-btn {
+  flex-shrink: 0;
+}
+.cc-alert-warn.cc-data-banner {
+  justify-content: flex-start;
+}

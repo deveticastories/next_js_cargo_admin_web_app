@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import "@/app/admin/admin.css";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
+import { DataStatusBanner } from "@/components/shared/DataStatusBanner";
 import { api } from "@/utils/apiClient";
 import { PAGE_TITLES } from "@/utils/navigation";
 
@@ -36,6 +37,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {/* Keyed by route so `.cc-content`'s entrance animation (see admin.css) replays on
             every navigation, instead of only once on first page load. */}
         <div className="cc-content" key={pathname}>
+          <DataStatusBanner />
           <div className="cc-page-head">
             <div>
               <div className="cc-page-title cc-h">{title}</div>

@@ -167,7 +167,6 @@ export function PreBookingScreen() {
             </Button>
           </div>
         </div>
-        {preBookings.error && <div className="cc-alert-error" style={{ margin: "14px 18px 0" }}>{preBookings.error}</div>}
         {preBookings.loading ? (
           <SkeletonTable columns={7} />
         ) : (

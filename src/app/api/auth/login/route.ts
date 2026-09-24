@@ -23,11 +23,13 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
   const invalid = () => new HttpError("Invalid email or password.", 401);
   const normalizedEmail = email.toLowerCase().trim();
 
-  const admin = await Admin.findOne({ email: normalizedEmail }).select("+passwordHash");
-  // A deactivated employee can't sign in even with the right password.
-  const employee = admin
-    ? null
-    : await Employee.findOne({ email: normalizedEmail, status: "Active" }).select("+passwordHash");
+  // Both lookups run in parallel (one round trip to Atlas instead of two); the admin wins if
+  // both exist. A deactivated employee can't sign in even with the right password.
+  const [admin, foundEmployee] = await Promise.all([
+    Admin.findOne({ email: normalizedEmail }).select("+passwordHash"),
+    Employee.findOne({ email: normalizedEmail, status: "Active" }).select("+passwordHash"),
+  ]);
+  const employee = admin ? null : foundEmployee;
   const account = admin ?? employee;
   if (!account || !account.passwordHash) throw invalid();
 

@@ -172,7 +172,6 @@ export function BookingScreen() {
             </Button>
           </div>
         </div>
-        {bookings.error && <div className="cc-alert-error" style={{ margin: "14px 18px 0" }}>{bookings.error}</div>}
         {bookings.loading ? (
           <SkeletonTable columns={12} />
         ) : (
