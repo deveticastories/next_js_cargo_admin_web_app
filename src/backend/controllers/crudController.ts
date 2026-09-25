@@ -14,7 +14,11 @@ export type RouteContext = { params: Promise<{ id: string }> };
  * extra workflow logic (e.g. `/api/stuffings`) need a hand-written handler
  * instead. Every handler requires a logged-in admin.
  */
-export function createCrudController<T>(model: Model<T>) {
+export function createCrudController<T>(
+  model: Model<T>,
+  /** Runs after connecting, before a create/update write — e.g. a one-time index migration. */
+  options: { beforeWrite?: () => Promise<void> } = {}
+) {
   const GET = withErrorHandling(async (req: NextRequest) => {
     await requireAuth(req);
     await connectDB();
@@ -25,6 +29,7 @@ export function createCrudController<T>(model: Model<T>) {
   const POST = withErrorHandling(async (req: NextRequest) => {
     await requireAuth(req);
     await connectDB();
+    await options.beforeWrite?.();
     const body = await readJsonBody(req);
     // The body is arbitrary client JSON — Mongoose validates its actual
     // shape against the model's schema at write time, so the cast here
@@ -36,6 +41,7 @@ export function createCrudController<T>(model: Model<T>) {
   const PATCH = withErrorHandling(async (req: NextRequest, context: RouteContext) => {
     await requireAuth(req);
     await connectDB();
+    await options.beforeWrite?.();
     const { id } = await context.params;
     const body = await readJsonBody(req);
     const doc = await model.findByIdAndUpdate(id, body as Partial<T>, { new: true, runValidators: true });

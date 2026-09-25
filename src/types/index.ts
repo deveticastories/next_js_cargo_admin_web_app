@@ -173,7 +173,9 @@ export interface PreBooking extends Omit<BaseRecord, "status"> {
   actualBundle: number;
 }
 
-export interface Container extends BaseRecord {
+export interface Container extends Omit<BaseRecord, "status"> {
+  /** "Stuffed" once bookings have been loaded into it (set by `POST /api/stuffings`). */
+  status?: Status | "Stuffed";
   company: string;
   stuffingDate: string;
   cutOffDate?: string;

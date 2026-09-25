@@ -261,7 +261,18 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
     // "Actual bundle" (repack mode) starts out at the bundle count entered when the
     // booking was made, instead of always "1".
     const initialBundle = b ? String(b.bundleCount || 1) : "1";
-    setBundle(initialBundle);
+    if (mode === "repack") {
+      // Repack mode numbers bundles by creation order (1, 2, 3, ...) — see `createBundle` —
+      // so only "Actual bundle" shows the booking's original count.
+      setBundle("1");
+    } else {
+      // Ready mode opens the first bundle that isn't saved yet — never an already-saved one.
+      const saved = b ? readySavedBundles.get(b.code) : undefined;
+      const count = Math.max(1, Number(b?.bundleCount || 1));
+      const firstUnsaved = Array.from({ length: count }, (_, i) => i + 1).find((n) => !saved?.has(n));
+      setBundle(firstUnsaved ? String(firstUnsaved) : "");
+      setPackingListVisible(Boolean(firstUnsaved));
+    }
     setBundleInput(initialBundle);
     // "Bundle count" starts at 0 — no bundle has actually been created yet (the
     // packing list itself is still hidden until Create Bundle is clicked). Each
@@ -296,15 +307,16 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
   };
 
   /**
-   * Repack mode's "Create Bundle" button — makes the typed bundle number the
-   * active one and bumps "Bundle count" by 1 ("Bundle count" starts at 0 on
-   * selecting a booking, so the first Create Bundle click takes it to 1, the
-   * next to 2, and so on).
+   * Repack mode's "Create Bundle" button — bumps "Bundle count" by 1 ("Bundle
+   * count" starts at 0 on selecting a booking) and opens the packing list for
+   * a bundle numbered by that count, so bundles in "Added bundles" read
+   * Bundle 1, Bundle 2, Bundle 3, ... in the order they were created.
    */
   const createBundle = async () => {
-    if (!bookingId || !bundle) return;
-    await selectBundle(bundle);
-    setAfterCount((prev) => String(Number(prev || 0) + 1));
+    if (!bookingId) return;
+    const next = String(Number(afterCount || 0) + 1);
+    await selectBundle(next);
+    setAfterCount(next);
     setPackingListVisible(true);
   };
 
@@ -506,6 +518,10 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
   // Ready mode: bundles that already have a saved packing list — shown greyed out and can't be picked again.
   const savedBundleNumbers = mode === "ready" && booking ? readySavedBundles.get(booking.code) : undefined;
   const isBundleSaved = (n: string) => Boolean(savedBundleNumbers?.has(Number(n)));
+  // Ready mode: the selected bundle turned out to be saved already (e.g. picked before the saved
+  // list finished loading) — treat it as unselected so its packing list can't be filled in again.
+  const selectedBundleSaved = mode === "ready" && isBundleSaved(bundle);
+  const showPackingList = packingListVisible && !selectedBundleSaved;
 
   /**
    * Repack mode's "Added bundles" rows — a this-session staging area only, not
@@ -567,10 +583,10 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
             bookingId && (
             <div className="cc-field">
               <label>Bundle</label>
-              <select value={bundle} onChange={(e) => selectBundle(e.target.value)}>
+              <select value={selectedBundleSaved ? "" : bundle} onChange={(e) => selectBundle(e.target.value)}>
                 <option value="">Choose a bundle</option>
                 {bundleOptions.map((n) => (
-                  <option key={n} value={n} disabled={isBundleSaved(n) && n !== bundle} style={isBundleSaved(n) ? { color: "#9ca3af", opacity: 0.5 } : undefined}>
+                  <option key={n} value={n} disabled={isBundleSaved(n)} style={isBundleSaved(n) ? { color: "#9ca3af", opacity: 0.5 } : undefined}>
                     Bundle {n}
                     {isBundleSaved(n) ? " (saved)" : ""}
                   </option>
@@ -589,9 +605,9 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
             <SkeletonTable columns={LINE_COLUMNS.length + 1} rows={3} />
           ) : (
             <>
-              {packingListVisible ? (
+              {showPackingList ? (
                 <>
-                  <div className="cc-mini-label">Packing list</div>
+                  <div className="cc-mini-label">Packing list{mode === "repack" && bundle ? ` — Bundle ${bundle}` : ""}</div>
                   {/* Same layout in both modes: net/gross weight on top (default first row
                       only) and the product fields below. "Add item" now sits next to Save
                       below, instead of in a header row above the list. */}

@@ -6,7 +6,9 @@ import { fmtDate } from "@/utils/format";
 
 /** Containers moving between Kochi and the UAE. */
 export function ContainersScreen() {
-  const { containers } = useCargoData();
+  const { containers, stuffings } = useCargoData();
+  // Containers stuffed before the backend started setting status "Stuffed" still show as Stuffed.
+  const stuffedIds = new Set(stuffings.items.map((s) => s.container));
 
   return (
     <MasterView
@@ -30,6 +32,7 @@ export function ContainersScreen() {
         { key: "etaUae", label: "ETA UAE", render: (r) => fmtDate(r.etaUae) },
       ]}
       collection={containers}
+      statusOf={(r) => (stuffedIds.has(r.id) ? "Stuffed" : r.status)}
     />
   );
 }

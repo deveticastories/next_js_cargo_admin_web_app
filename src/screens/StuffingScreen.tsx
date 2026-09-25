@@ -16,7 +16,7 @@ import { SkeletonTable } from "@/components/ui/Skeleton";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { api, ApiError } from "@/utils/apiClient";
 import { downloadText, fmtDate } from "@/utils/format";
-import type { Booking } from "@/types";
+import type { Booking, UaeStoreLogEntry } from "@/types";
 
 interface StuffingSummary {
   code: string;
@@ -25,7 +25,7 @@ interface StuffingSummary {
 }
 
 export function StuffingScreen() {
-  const { bookings, containers, uaeStoreLog } = useCargoData();
+  const { bookings, containers, stuffings, uaeStoreLog } = useCargoData();
   const [containerId, setContainerId] = useState("");
   const [bookingQuery, setBookingQuery] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
@@ -35,9 +35,26 @@ export function StuffingScreen() {
   const [lastSummary, setLastSummary] = useState<StuffingSummary | null>(null);
 
   const eligible = bookings.items.filter((b) => b.sentToStuffing && !b.stuffed);
+  // Already-stuffed containers aren't offered again — same rule as the Containers table's "Stuffed" badge.
+  const stuffedContainerIds = new Set(stuffings.items.map((s) => s.container));
+  const availableContainers = containers.items.filter((c) => c.status !== "Stuffed" && !stuffedContainerIds.has(c.id));
+  // UAE store log entry → its stuffing → that stuffing's container.
+  const containerOfLog = (entry: UaeStoreLogEntry) => {
+    const containerRef = stuffings.items.find((s) => s.id === entry.stuffing)?.container;
+    return containers.items.find((c) => c.id === containerRef);
+  };
   const q = bookingQuery.trim().toLowerCase();
   const visible = eligible.filter((b) => [b.code, b.sender, b.receiver].some((v) => v.toLowerCase().includes(q)));
   const toggle = (id: string) => setSelected(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
+  // Header checkbox — selects/clears every booking currently shown (respecting the search filter).
+  const allVisibleSelected = visible.length > 0 && visible.every((b) => selected.includes(b.id));
+  const someVisibleSelected = visible.some((b) => selected.includes(b.id));
+  const toggleAllVisible = () => {
+    const visibleIds = visible.map((b) => b.id);
+    setSelected(
+      allVisibleSelected ? selected.filter((id) => !visibleIds.includes(id)) : [...new Set([...selected, ...visibleIds])]
+    );
+  };
 
   /** Undo Ready to stuff's "Go to stuffing" for one booking — it goes back onto that list. */
   const sendBack = async (id: string) => {
@@ -65,7 +82,7 @@ export function StuffingScreen() {
       const created = await api.post<{ code: string }>("/stuffings", { containerId, bookingIds: selected });
       const container = containers.items.find((c) => c.id === containerId);
       setLastSummary({ code: created.code, containerCode: container?.code ?? "", bookings: stuffedBookings });
-      await Promise.all([bookings.refetch(), uaeStoreLog.refetch()]);
+      await Promise.all([bookings.refetch(), uaeStoreLog.refetch(), containers.refetch(), stuffings.refetch()]);
       setSelected([]);
       setContainerId("");
     } catch (err) {
@@ -88,7 +105,7 @@ export function StuffingScreen() {
           <label>Container</label>
           <select value={containerId} onChange={(e) => setContainerId(e.target.value)}>
             <option value="">Choose a container</option>
-            {containers.items.map((c) => (
+            {availableContainers.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.code} — {c.company}
               </option>
@@ -109,7 +126,18 @@ export function StuffingScreen() {
             <table className="cc-table">
               <thead>
                 <tr>
-                  <th></th>
+                  <th>
+                    <input
+                      type="checkbox"
+                      aria-label="Select all bookings"
+                      checked={allVisibleSelected}
+                      ref={(el) => {
+                        if (el) el.indeterminate = someVisibleSelected && !allVisibleSelected;
+                      }}
+                      disabled={visible.length === 0}
+                      onChange={toggleAllVisible}
+                    />
+                  </th>
                   <th>Booking ID</th>
                   <th>Sender</th>
                   <th>Receiver</th>
@@ -182,12 +210,22 @@ export function StuffingScreen() {
           <div className="cc-panel-title">UAE store — incoming log</div>
         </div>
         {uaeStoreLog.loading ? (
-          <SkeletonTable columns={4} />
+          <SkeletonTable columns={7} />
         ) : (
           <DataTable
             emptyText="Nothing has arrived at the UAE store yet."
             columns={[
               { key: "booking", label: "Booking ID", render: (r) => bookings.items.find((b) => b.id === r.booking)?.code ?? "—" },
+              { key: "stuffing", label: "Container ID", render: (r) => containerOfLog(r)?.code ?? "—" },
+              { key: "containerName", label: "Container name", render: (r) => containerOfLog(r)?.company ?? "—" },
+              {
+                key: "stuffedDate",
+                label: "Stuffed date",
+                render: (r) => {
+                  const date = containerOfLog(r)?.stuffingDate;
+                  return date ? fmtDate(date) : "—";
+                },
+              },
               { key: "receiver", label: "Receiver" },
               { key: "bundles", label: "Bundles" },
               { key: "date", label: "Date", render: (r) => fmtDate(r.date) },

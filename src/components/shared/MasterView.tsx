@@ -44,6 +44,8 @@ export interface MasterViewProps<T extends RecordWithId> {
   isFieldDisabled?: (fieldKey: string, savedRow: T | undefined) => boolean;
   /** Asks "Are you sure?" before the table's Active/Inactive badge click actually flips the status. Off by default — most screens' status toggle is low-stakes enough not to need it. */
   confirmStatusToggle?: boolean;
+  /** Overrides the status shown in the table (defaults to `row.status`). Anything other than Active/Inactive (e.g. a container's "Stuffed") shows as a plain, non-clickable badge. */
+  statusOf?: (row: T) => string | undefined;
 }
 
 const STATUS_FIELD: FieldConfig = { key: "status", label: "Status", type: "select", options: ["Active", "Inactive"] };
@@ -65,6 +67,7 @@ export function MasterView<T extends RecordWithId>({
   canDelete,
   isFieldDisabled,
   confirmStatusToggle = false,
+  statusOf = (row) => (row as { status?: string }).status,
 }: MasterViewProps<T>) {
   const { items: rows, loading, error: loadError, create, update, remove } = collection;
   const [query, setQuery] = useState("");
@@ -167,18 +170,23 @@ export function MasterView<T extends RecordWithId>({
         {
           key: "status",
           label: "Status",
-          render: (row) => (
-            <span
-              onClick={() => busyRowId !== row.id && toggleStatus(row)}
-              style={
-                busyRowId === row.id
-                  ? { cursor: "default", opacity: 0.5, pointerEvents: "none" }
-                  : { cursor: "pointer" }
-              }
-            >
-              <Badge value={(row as { status?: Status }).status} />
-            </span>
-          ),
+          render: (row) => {
+            const status = statusOf(row);
+            // Only Active/Inactive toggle — any other status is set elsewhere and shown read-only.
+            if (status && status !== "Active" && status !== "Inactive") return <Badge value={status} />;
+            return (
+              <span
+                onClick={() => busyRowId !== row.id && toggleStatus(row)}
+                style={
+                  busyRowId === row.id
+                    ? { cursor: "default", opacity: 0.5, pointerEvents: "none" }
+                    : { cursor: "pointer" }
+                }
+              >
+                <Badge value={status} />
+              </span>
+            );
+          },
         },
       ]
     : columns;

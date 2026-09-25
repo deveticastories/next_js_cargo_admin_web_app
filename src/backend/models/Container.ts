@@ -11,7 +11,8 @@ const containerSchema = new Schema(
     etaCok: { type: Date },
     etdCok: { type: Date },
     etaUae: { type: Date },
-    status: { type: String, enum: ["Active", "Inactive"], default: "Active" },
+    // "Stuffed" is set by `POST /api/stuffings` once bookings are loaded into the container.
+    status: { type: String, enum: ["Active", "Inactive", "Stuffed"], default: "Active" },
   },
   baseSchemaOptions
 );
