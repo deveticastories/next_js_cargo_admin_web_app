@@ -17,11 +17,13 @@ import type {
   DailyExpense,
   DeliveryPartner,
   Employee,
+  Fabric,
   Invoice,
   PickupAssign,
   PickupPartner,
   PreBooking,
   PricingRoute,
+  Product,
   ReceiptEntry,
   Receiver,
   Sender,
@@ -37,6 +39,8 @@ export interface CargoData {
   receivers: ApiCollection<Receiver>;
   stores: ApiCollection<Store>;
   countries: ApiCollection<Country>;
+  products: ApiCollection<Product>;
+  fabrics: ApiCollection<Fabric>;
   deliveryPartners: ApiCollection<DeliveryPartner>;
   pickupPartners: ApiCollection<PickupPartner>;
   pricing: ApiCollection<PricingRoute>;
@@ -61,6 +65,8 @@ export function CargoDataProvider({ children }: { children: ReactNode }) {
     receivers: useApiCollection<Receiver>("/receivers"),
     stores: useApiCollection<Store>("/stores"),
     countries: useApiCollection<Country>("/countries"),
+    products: useApiCollection<Product>("/products"),
+    fabrics: useApiCollection<Fabric>("/fabrics"),
     deliveryPartners: useApiCollection<DeliveryPartner>("/delivery-partners"),
     pickupPartners: useApiCollection<PickupPartner>("/pickup-partners"),
     pricing: useApiCollection<PricingRoute>("/pricing"),

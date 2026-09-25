@@ -72,6 +72,16 @@ export interface Country extends BaseRecord {
   name: string;
 }
 
+/** A product name picked in the Repacking / Package ready packing lists. */
+export interface Product extends BaseRecord {
+  name: string;
+}
+
+/** A fabric picked in the Repacking / Package ready packing lists. */
+export interface Fabric extends BaseRecord {
+  name: string;
+}
+
 export interface DeliveryPartner extends BaseRecord {
   name: string;
   whatsapp: string;
@@ -117,6 +127,8 @@ export interface Booking extends BaseRecord {
   productType: ProductType | "";
   repackingStatus: RepackingStatus | "";
   stuffed: boolean;
+  /** True once Ready to stuff's "Go to stuffing" has moved it on to the Stuffing screen. */
+  sentToStuffing?: boolean;
   /** Only meaningful when `productType` is "Branded" — 0 otherwise. */
   brandHandlingCharge: number;
   /** Only meaningful when `billOption` is "Without Bill" — 0 otherwise. */
@@ -283,7 +295,7 @@ export interface FieldConfig {
 
 export interface ColumnConfig<T> {
   key: string;
-  label: string;
+  label: React.ReactNode;
   render?: (row: T) => React.ReactNode;
 }
 

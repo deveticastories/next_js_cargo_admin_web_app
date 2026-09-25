@@ -17,3 +17,5 @@ export { CreditNote } from "@/backend/models/CreditNote";
 export { PackingList } from "@/backend/models/PackingList";
 export { Stuffing } from "@/backend/models/Stuffing";
 export { UaeStoreLog } from "@/backend/models/UaeStoreLog";
+export { Product } from "@/backend/models/Product";
+export { Fabric } from "@/backend/models/Fabric";

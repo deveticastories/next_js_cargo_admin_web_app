@@ -11,6 +11,8 @@ const LABELS: Record<keyof CargoData, string> = {
   receivers: "receivers",
   stores: "stores",
   countries: "countries",
+  products: "products",
+  fabrics: "fabrics",
   deliveryPartners: "delivery partners",
   pickupPartners: "pickup partners",
   pricing: "pricing",

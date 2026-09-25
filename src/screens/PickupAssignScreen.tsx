@@ -17,6 +17,7 @@ export function PickupAssignScreen() {
   // Clicking a "Pending" row's Pickup status badge opens this popup to record how many
   // bundles were actually collected, then marks that row "Collected". Once collected,
   // the badge is locked — no popup, no further pickup-status changes from the table.
+  // The same popup also opens from a Collected row's "Collected bundle" number, to correct that count.
   const [collectRow, setCollectRow] = useState<PickupAssign | null>(null);
   const [collectedBundleInput, setCollectedBundleInput] = useState("");
   const [collecting, setCollecting] = useState(false);
@@ -31,7 +32,8 @@ export function PickupAssignScreen() {
 
   const openCollect = (row: PickupAssign) => {
     setCollectRow(row);
-    setCollectedBundleInput("");
+    // Editing an already-collected row starts from its saved count.
+    setCollectedBundleInput(row.pickupStatus === "Collected" && row.collectedBundle ? String(row.collectedBundle) : "");
     setCollectError("");
   };
 
@@ -39,6 +41,10 @@ export function PickupAssignScreen() {
     if (!collectRow) return;
     if (!collectedBundleInput || Number(collectedBundleInput) <= 0) {
       setCollectError("Enter how many bundles were collected.");
+      return;
+    }
+    if (Number(collectedBundleInput) > Number(collectRow.bundleCount || 0)) {
+      setCollectError(`Collected bundle can't be more than the ${collectRow.bundleCount} bundles assigned.`);
       return;
     }
     setCollecting(true);
@@ -127,7 +133,28 @@ export function PickupAssignScreen() {
                 </span>
               ),
           },
-          { key: "collectedBundle", label: "Collected bundle", render: (r) => (r.collectedBundle ? r.collectedBundle : "—") },
+          {
+            key: "collectedBundle",
+            label: "Collected bundle",
+            render: (r) =>
+              r.pickupStatus === "Collected" ? (
+                <span
+                  onClick={() => openCollect(r)}
+                  style={{ cursor: "pointer", color: "var(--accent)", fontWeight: 600, textDecoration: "underline dotted" }}
+                  title="Click to edit the collected bundle count"
+                >
+                  {r.collectedBundle || 0}
+                </span>
+              ) : (
+                "—"
+              ),
+          },
+          // Bundles assigned but not collected — only known once the run is Collected.
+          {
+            key: "balanceBundle",
+            label: "Balance bundle",
+            render: (r) => (r.pickupStatus === "Collected" ? Math.max(0, Number(r.bundleCount || 0) - Number(r.collectedBundle || 0)) : "—"),
+          },
         ]}
         collection={pickupAssigns}
         initialNewValues={{ paymentStatus: "Unpaid", pickupStatus: "Pending" }}
@@ -139,7 +166,11 @@ export function PickupAssignScreen() {
 
       {collectRow && (
         <Modal
-          title={`Mark "${collectRow.transport}" (${collectRow.lrNo}) as collected`}
+          title={
+            collectRow.pickupStatus === "Collected"
+              ? `Edit collected bundle — "${collectRow.transport}" (${collectRow.lrNo})`
+              : `Mark "${collectRow.transport}" (${collectRow.lrNo}) as collected`
+          }
           onClose={() => setCollectRow(null)}
           onSubmit={submitCollect}
           submitLabel="Submit"
@@ -150,6 +181,10 @@ export function PickupAssignScreen() {
             value={collectedBundleInput}
             onChange={(_, v) => setCollectedBundleInput(v)}
           />
+          <div className="cc-panel-desc" style={{ marginTop: 8 }}>
+            Assigned: {collectRow.bundleCount} · Balance:{" "}
+            {Math.max(0, Number(collectRow.bundleCount || 0) - Number(collectedBundleInput || 0))}
+          </div>
           {collectError && <div className="cc-error">{collectError}</div>}
         </Modal>
       )}

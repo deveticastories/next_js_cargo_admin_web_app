@@ -11,7 +11,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   LayoutDashboard, Users, UsersRound, Warehouse, Globe, Truck, Bike, Tags,
   ClipboardList, CalendarPlus, PackagePlus, PackageCheck, Boxes, Ship, ArrowRightLeft, PackageOpen,
-  FileText, Wallet, Receipt, ReceiptText, BarChart3,
+  FileText, Wallet, Receipt, ReceiptText, BarChart3, Package2, Shirt,
 } from "lucide-react";
 
 export interface NavItem {
@@ -37,6 +37,8 @@ export const NAV: NavGroup[] = [
       { href: "/admin/delivery-partners", label: "Delivery partners", icon: Truck },
       { href: "/admin/pickup-partners", label: "Pickup partners", icon: Bike },
       { href: "/admin/pricing", label: "Pricing", icon: Tags },
+      { href: "/admin/products", label: "Product", icon: Package2 },
+      { href: "/admin/fabrics", label: "Fabric", icon: Shirt },
     ],
   },
   {
@@ -83,6 +85,8 @@ export const PAGE_TITLES: Record<string, [string, string]> = {
   "/admin/delivery-partners": ["Delivery partners", "Last-mile delivery vendors at the receiving end"],
   "/admin/pickup-partners": ["Pickup partners", "Third-party partners who collect bundles from senders"],
   "/admin/pricing": ["Pricing", "Route-wise price per unit of measure"],
+  "/admin/products": ["Product", "Product names used in Repacking and Package ready packing lists"],
+  "/admin/fabrics": ["Fabric", "Fabrics used in Repacking and Package ready packing lists"],
   "/admin/pickup-assign": ["Pickup assign", "Assign a transport and LR number to a collection run"],
   "/admin/pre-booking": ["Pre-booking", "Book a shipment in before the receiver is known"],
   "/admin/booking": ["Booking", "Create and track shipment bookings"],

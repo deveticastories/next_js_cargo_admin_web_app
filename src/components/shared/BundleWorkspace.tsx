@@ -24,6 +24,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { CheckCircle2, Download, Plus, Save, X } from "lucide-react";
 import type { Booking, BundleLineItem } from "@/types";
 import type { ApiCollection } from "@/utils/useApiCollection";
@@ -99,7 +100,19 @@ export interface BundleWorkspaceProps {
 const bookingLabel = (b?: Booking) => (b ? `${b.code} — ${b.sender} → ${b.receiver}` : "");
 
 export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
-  const { senders, receivers } = useCargoData();
+  const { senders, receivers, products, fabrics } = useCargoData();
+  const router = useRouter();
+  // Product / Fabric pick from their master lists; the search's "Add new" row deep-links into
+  // that master screen's "add new" form, prefilled with whatever was typed.
+  const LINE_MASTERS: Partial<Record<keyof BundleLineItem, { options: string[]; href: string; createLabel: string }>> = {
+    product: { options: products.items.map((p) => p.name), href: "/admin/products", createLabel: "Add new product" },
+    fabric: { options: fabrics.items.map((f) => f.name), href: "/admin/fabrics", createLabel: "Add new fabric" },
+  };
+  const addMasterFromSearch = (href: string, typedName: string) => {
+    const params = new URLSearchParams({ new: "1" });
+    if (typedName) params.set("name", typedName);
+    router.push(`${href}?${params.toString()}`);
+  };
   // The Booking ID dropdown's options — repack mode also excludes bookings already
   // repacked (Confirm has set `actualBundle` at least once). "Complete repacking, move
   // to ready to ship" is currently commented out, so `repackingStatus` alone never flips
@@ -108,8 +121,10 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
   // "Saved bundle list" / "Saved packing lists" scope — deliberately broader than
   // `eligible` above: it must still show a booking's saved bundles after that booking
   // becomes "already repacked" and drops out of the dropdown, not just before.
+  // Repack mode also keeps bookings already repacked (`actualBundle` set) — Confirm now moves
+  // them on to "Ready to Ship", and their bundles should stay in "Saved bundle list".
   const savedListBookings = bookings.items.filter((b) =>
-    b.repackingStatus === (mode === "ready" ? "Ready to Ship" : "Repacking Required")
+    mode === "ready" ? b.repackingStatus === "Ready to Ship" : b.repackingStatus === "Repacking Required" || Boolean(b.actualBundle)
   );
   const [bookingId, setBookingId] = useState("");
   const [bundle, setBundle] = useState("1");
@@ -120,6 +135,10 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
   // review, but hasn't yet written to the database — "Confirm" there is what
   // actually persists them (see `confirmBundles`).
   const [stagedBundles, setStagedBundles] = useState<{ bundleNumber: number; items: BundleLineItem[] }[]>([]);
+  // Repack mode only: true once Confirm has saved the current "Added bundles" — the table stays
+  // up (so its packing list PDF can still be downloaded) but Confirm is locked until another
+  // bundle is added. Reset on selecting a booking.
+  const [confirmed, setConfirmed] = useState(false);
   // Repack mode only: whether the Packing list fields are showing. Hidden
   // until Create Bundle is clicked (selecting a booking alone no longer
   // reveals it), and hidden again after Save (that bundle is done); Create
@@ -145,18 +164,14 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
 
   const booking = bookings.items.find((b) => b.id === bookingId);
 
-  // Ready mode also drops a booking once every one of its bundles has a saved packing list
-  // (`savedRows` below) — it's done, so it shouldn't be offered again. The currently selected
+  // Ready mode also drops a booking once every one of its bundles has been saved from this
+  // screen (`readySavedBundles` — repacking's own lists don't count, so a repacked booking still
+  // comes through here) — it's done, so it shouldn't be offered again. The currently selected
   // booking is kept so the dropdown doesn't blank out right after its last bundle is saved.
-  const savedBundlesByCode = new Map<string, Set<number>>();
-  for (const r of savedRows) {
-    if (!savedBundlesByCode.has(r.bookingCode)) savedBundlesByCode.set(r.bookingCode, new Set());
-    savedBundlesByCode.get(r.bookingCode)!.add(r.bundleNumber);
-  }
   const eligible = bookings.items.filter((b) =>
     mode === "ready"
       ? b.repackingStatus === "Ready to Ship" &&
-        (b.id === bookingId || (savedBundlesByCode.get(b.code)?.size ?? 0) < Math.max(1, b.actualBundle || b.bundleCount || 1))
+        (b.id === bookingId || (readySavedBundles.get(b.code)?.size ?? 0) < Math.max(1, b.actualBundle || b.bundleCount || 1))
       : b.repackingStatus === "Repacking Required" && !b.actualBundle
   );
 
@@ -236,6 +251,7 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
     // Unconfirmed bundles are scoped to whichever booking was open — starting fresh
     // matches "Added bundles" starting out empty for a newly selected booking.
     setStagedBundles([]);
+    setConfirmed(false);
     setRepackedBy("");
     // Repack mode: the Packing list fields stay hidden until Create Bundle is
     // clicked. Ready mode ignores this flag (its list always renders), so
@@ -293,7 +309,8 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
   };
 
   const updateLine = (index: number, key: keyof BundleLineItem, rawVal: string) => {
-    const val = sanitizeLineValue(key, rawVal);
+    // Product / Fabric come from their master lists as-is — only typed input is filtered.
+    const val = LINE_MASTERS[key] ? rawVal : sanitizeLineValue(key, rawVal);
     setLines(lines.map((l, i) => (i === index ? { ...l, [key]: val } : l)));
     setSavedMessage("");
   };
@@ -330,6 +347,7 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
           (a, b) => a.bundleNumber - b.bundleNumber
         )
       );
+      setConfirmed(false);
       setError("");
       setSavedMessage(`Added Bundle ${bundle} to the list below — click Confirm to save it.`);
       setLines([emptyLine()]);
@@ -400,13 +418,13 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
     try {
       const confirmedCount = stagedBundles.length;
       await persistStagedBundles(stagedBundles);
-      await bookings.update(bookingId, { bundleCount: confirmedCount, actualBundle: confirmedCount });
+      // Every bundle now has a saved packing list (Package list status "Added"), so the booking is Package Ready.
+      await bookings.update(bookingId, { bundleCount: confirmedCount, actualBundle: confirmedCount, repackingStatus: "Ready to Ship" });
       setAfterCount(String(confirmedCount));
       setSavedMessage(`Confirmed and saved ${confirmedCount} bundle${confirmedCount === 1 ? "" : "s"}.`);
-      // "Added bundles" is a staging area, not a saved-history view — it empties
-      // out once confirmed, same as it started empty for this booking.
-      setStagedBundles([]);
-      setRepackedBy("");
+      // "Added bundles" (and Repacked by) stay as they are after Confirm so the packing list
+      // PDF can still be downloaded — they only clear on leaving the screen or picking another booking.
+      setConfirmed(true);
       await loadSavedRows();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to save the bundles.");
@@ -492,8 +510,8 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
   /**
    * Repack mode's "Added bundles" rows — a this-session staging area only, not
    * a saved-history view: purely what's in `stagedBundles`, nothing fetched
-   * server-side. Starts empty for a newly selected booking and empties again
-   * once Confirm writes it to the database.
+   * server-side. Starts empty for a newly selected booking and stays after
+   * Confirm writes it to the database (so it can still be downloaded).
    */
   const stagedRows: SavedItemRow[] = stagedBundles
     .flatMap((b) =>
@@ -524,6 +542,8 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
             }}
           />
           {mode === "repack" ? (
+            // Hidden until a booking is chosen — there's nothing to bundle before that.
+            bookingId && (
             <div className="cc-field">
               <label>Actual bundle</label>
               <div style={{ display: "flex", gap: 8 }}>
@@ -541,10 +561,13 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
                 </Button>
               </div>
             </div>
+            )
           ) : (
+            // Hidden until a booking is chosen, same as repack mode's Actual bundle.
+            bookingId && (
             <div className="cc-field">
               <label>Bundle</label>
-              <select value={bundle} onChange={(e) => selectBundle(e.target.value)} disabled={!bookingId}>
+              <select value={bundle} onChange={(e) => selectBundle(e.target.value)}>
                 <option value="">Choose a bundle</option>
                 {bundleOptions.map((n) => (
                   <option key={n} value={n} disabled={isBundleSaved(n) && n !== bundle} style={isBundleSaved(n) ? { color: "#9ca3af", opacity: 0.5 } : undefined}>
@@ -554,6 +577,7 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
                 ))}
               </select>
             </div>
+            )
           )}
         </div>
 
@@ -591,7 +615,21 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
                           </div>
                         )}
                         <div className="cc-line-item-products">
-                          {PRODUCT_COLUMNS.map((c) => (
+                          {PRODUCT_COLUMNS.map((c) => {
+                            const master = LINE_MASTERS[c.key];
+                            return master ? (
+                              <div className="cc-line-field" key={c.key}>
+                                <SearchableSelect
+                                  label={c.label}
+                                  placeholder={`Choose ${c.label.toLowerCase()}`}
+                                  value={line[c.key]}
+                                  options={master.options}
+                                  onChange={(v) => updateLine(index, c.key, v)}
+                                  createLabel={master.createLabel}
+                                  onCreateNew={(q) => addMasterFromSearch(master.href, q)}
+                                />
+                              </div>
+                            ) : (
                             <div className="cc-line-field" key={c.key}>
                               <label>{c.label}</label>
                               <input
@@ -601,7 +639,8 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
                                 onChange={(e) => updateLine(index, c.key, e.target.value)}
                               />
                             </div>
-                          ))}
+                            );
+                          })}
                           <Button
                             variant="ghost"
                             className="cc-line-remove"
@@ -660,10 +699,10 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
                       variant="primary"
                       onClick={confirmBundles}
                       loading={saving}
-                      disabled={!bookingId || stagedBundles.length === 0 || !repackedBy.trim()}
-                      title={stagedBundles.length === 0 ? "Save a bundle above first" : !repackedBy.trim() ? "Fill in Repacked by first" : "Save every listed bundle to the database"}
+                      disabled={!bookingId || stagedBundles.length === 0 || !repackedBy.trim() || confirmed}
+                      title={confirmed ? "Already confirmed — add another bundle to confirm again" : stagedBundles.length === 0 ? "Save a bundle above first" : !repackedBy.trim() ? "Fill in Repacked by first" : "Save every listed bundle to the database"}
                     >
-                      {!saving && <CheckCircle2 size={15} />} {saving ? "Saving…" : "Confirm"}
+                      {!saving && <CheckCircle2 size={15} />} {saving ? "Saving…" : confirmed ? "Confirmed" : "Confirm"}
                     </Button>
                   </div>
                   {/* Commented out per request — button hidden, `completeRepacking` kept for when it comes back.

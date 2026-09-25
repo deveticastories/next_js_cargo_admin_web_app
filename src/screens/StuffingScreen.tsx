@@ -1,14 +1,14 @@
 "use client";
 
 /**
- * Load ready-to-ship bookings into a container. Submitting calls
+ * Load bookings sent here from Ready to stuff ("Go to stuffing") into a container. Submitting calls
  * `POST /api/stuffings`, which atomically records the stuffing, marks the
  * chosen bookings as stuffed, and copies them into the UAE store's
  * incoming log — then this screen just refetches those two collections.
  */
 
 import { useState } from "react";
-import { ArrowRightLeft, Download } from "lucide-react";
+import { ArrowRightLeft, Download, Undo2 } from "lucide-react";
 import { useCargoData } from "@/components/providers/CargoDataProvider";
 import { Button } from "@/components/ui/Button";
 import { DataTable } from "@/components/ui/DataTable";
@@ -30,13 +30,28 @@ export function StuffingScreen() {
   const [bookingQuery, setBookingQuery] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [sendingBackId, setSendingBackId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [lastSummary, setLastSummary] = useState<StuffingSummary | null>(null);
 
-  const eligible = bookings.items.filter((b) => b.repackingStatus === "Ready to Ship" && !b.stuffed);
+  const eligible = bookings.items.filter((b) => b.sentToStuffing && !b.stuffed);
   const q = bookingQuery.trim().toLowerCase();
   const visible = eligible.filter((b) => [b.code, b.sender, b.receiver].some((v) => v.toLowerCase().includes(q)));
   const toggle = (id: string) => setSelected(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
+
+  /** Undo Ready to stuff's "Go to stuffing" for one booking — it goes back onto that list. */
+  const sendBack = async (id: string) => {
+    setSendingBackId(id);
+    setError("");
+    try {
+      await bookings.update(id, { sentToStuffing: false });
+      setSelected((prev) => prev.filter((x) => x !== id));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to send the booking back.");
+    } finally {
+      setSendingBackId(null);
+    }
+  };
 
   const submit = async () => {
     if (!containerId || selected.length === 0) {
@@ -81,14 +96,14 @@ export function StuffingScreen() {
           </select>
         </div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-          <div className="cc-mini-label">Ready-to-ship bookings available for stuffing</div>
+          <div className="cc-mini-label">Bookings sent from Ready to stuff</div>
           <SearchBar value={bookingQuery} onChange={setBookingQuery} placeholder="Search booking ID, sender, receiver" />
         </div>
         {error && <div className="cc-alert-error" style={{ marginBottom: 12 }}>{error}</div>}
         {bookings.loading ? (
-          <SkeletonTable columns={5} rows={3} />
+          <SkeletonTable columns={6} rows={3} />
         ) : eligible.length === 0 ? (
-          <div className="cc-empty">No ready-to-ship bookings are waiting to be stuffed.</div>
+          <div className="cc-empty">No bookings waiting — select them on Ready to stuff and click Go to stuffing.</div>
         ) : (
           <div className="cc-table-wrap">
             <table className="cc-table">
@@ -99,12 +114,13 @@ export function StuffingScreen() {
                   <th>Sender</th>
                   <th>Receiver</th>
                   <th>Bundles</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
                 {visible.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="cc-empty">
+                    <td colSpan={6} className="cc-empty">
                       No bookings match &ldquo;{bookingQuery}&rdquo;
                     </td>
                   </tr>
@@ -117,7 +133,19 @@ export function StuffingScreen() {
                     <td>{b.code}</td>
                     <td>{b.sender}</td>
                     <td>{b.receiver}</td>
-                    <td>{b.bundleCount}</td>
+                    <td>{b.actualBundle || b.bundleCount}</td>
+                    <td>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => sendBack(b.id)}
+                        loading={sendingBackId === b.id}
+                        disabled={submitting}
+                        title="Move this booking back to Ready to stuff"
+                      >
+                        {sendingBackId !== b.id && <Undo2 size={14} />} Send back
+                      </Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -125,7 +153,13 @@ export function StuffingScreen() {
           </div>
         )}
         <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
-          <Button variant="primary" onClick={submit} loading={submitting}>
+          <Button
+            variant="primary"
+            onClick={submit}
+            loading={submitting}
+            disabled={!containerId || selected.length === 0}
+            title={!containerId ? "Choose a container first" : selected.length === 0 ? "Select at least one booking" : undefined}
+          >
             {!submitting && <ArrowRightLeft size={15} />} {submitting ? "Submitting…" : "Submit stuffing"}
           </Button>
         </div>

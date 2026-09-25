@@ -1,4 +1,4 @@
-import { Schema, model, models } from "mongoose";
+import mongoose, { Schema, model, models } from "mongoose";
 import { baseSchemaOptions } from "@/backend/utils/schemaOptions";
 import { withCode } from "@/backend/utils/generateCode";
 
@@ -21,6 +21,8 @@ const bookingSchema = new Schema(
     repackingStatus: { type: String, enum: ["Ready to Ship", "Repacking Required"], default: "Repacking Required" },
     status: { type: String, enum: ["Active", "Inactive"], default: "Active" },
     stuffed: { type: Boolean, default: false },
+    // Set by Ready to stuff's "Go to stuffing" — the booking then leaves that queue and shows on Stuffing.
+    sentToStuffing: { type: Boolean, default: false },
     // Conditional extra charges from the booking form — each only applies
     // under its own condition (see the matching comment on `Booking` in
     // src/types); the form itself zeroes out whichever ones don't apply
@@ -36,5 +38,11 @@ const bookingSchema = new Schema(
   baseSchemaOptions
 );
 withCode(bookingSchema, "BKG");
+
+// In dev, hot reload keeps the first-registered model alive — one compiled before `sentToStuffing`
+// existed would silently strip that field on every save, so drop a stale copy and re-register.
+if (models.Booking && !models.Booking.schema.path("sentToStuffing")) {
+  mongoose.deleteModel("Booking");
+}
 
 export const Booking = models.Booking ?? model("Booking", bookingSchema);

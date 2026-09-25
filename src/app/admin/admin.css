@@ -862,6 +862,12 @@ table.cc-table tr:hover td {
   color: var(--text-soft);
   margin-bottom: 4px;
 }
+/* Product / Fabric searchable selects inside a packing-list line — match the line's own label size. */
+.cc-line-field .cc-searchselect label {
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
 .cc-line-remove {
   align-self: end;
 }

@@ -187,7 +187,8 @@ export function BookingScreen() {
               { key: "bundleType", label: "Bundle type" },
               { key: "productType", label: "Product type" },
               { key: "billOption", label: "Bill", render: (r) => <Badge value={r.billOption} /> },
-              { key: "repackingStatus", label: "Pack status", render: (r) => <Badge value={r.repackingStatus} label={r.repackingStatus === "Ready to Ship" ? "Package Ready" : undefined} /> },
+              // A booking whose package list is Added reads as Package Ready, even if it was saved as Repacking Required.
+              { key: "repackingStatus", label: "Pack status", render: (r) => (r.repackingStatus === "Ready to Ship" || (!loadingLists && packageListAdded(r)) ? <Badge value="Ready to Ship" label="Package Ready" /> : <Badge value={r.repackingStatus} />) },
               { key: "packageListStatus", label: "Package list status", render: (r) => (loadingLists ? "…" : packageListAdded(r) ? <Badge value="Added" /> : "—") },
               { key: "status", label: "Status", render: (r) => <Badge value={r.stuffed ? "Stuffed" : "Pending"} /> },
             ]}
@@ -240,7 +241,7 @@ export function BookingScreen() {
           </div>
           <div className="cc-grid-2">
             <Field field={{ key: "productType", label: "Product type", type: "select", options: ["Branded", "Normal"] }} value={form.productType} onChange={set} />
-            <Field field={{ key: "repackingStatus", label: "Pack status", type: "select", options: ["Ready to Ship", "Repacking Required"], optionLabels: { "Repacking Required": "Package Ready" } }} value={form.repackingStatus} onChange={set} />
+            <Field field={{ key: "repackingStatus", label: "Pack status", type: "select", options: ["Ready to Ship", "Repacking Required"], optionLabels: { "Ready to Ship": "Package Ready", "Repacking Required": "Repacking" } }} value={form.repackingStatus} onChange={set} />
           </div>
           {(showBrandHandlingCharge || showPickupCharge || showBundleHandlingCharge) && (
             <div className="cc-grid-2">

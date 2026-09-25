@@ -38,6 +38,10 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
   if (alreadyStuffed) {
     throw new HttpError(`Booking ${alreadyStuffed.code} has already been stuffed.`, 409);
   }
+  const notSent = bookings.find((b) => !b.sentToStuffing);
+  if (notSent) {
+    throw new HttpError(`Booking ${notSent.code} hasn't been sent from Ready to stuff yet.`, 409);
+  }
 
   const session = await mongoose.startSession();
   let stuffing;
