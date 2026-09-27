@@ -59,6 +59,9 @@ const SAVED_ITEM_COLUMNS: { key: keyof SavedItemRow; label: string }[] = [
   { key: "description", label: "Description" },
 ];
 
+/** Repacking's "Saved bundle list" table is hidden for now — flip to true to bring it back. */
+const SHOW_SAVED_BUNDLE_LIST = false;
+
 /** Repacking's tables add a "Repacked by" column after the shared ones. */
 const REPACK_ITEM_COLUMNS: { key: keyof SavedItemRow; label: string }[] = [
   ...SAVED_ITEM_COLUMNS,
@@ -786,8 +789,8 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
         )}
       </div>
 
-      {/* Ready mode doesn't show this table — `savedRows` is still loaded for the Booking ID dropdown's "done" check. */}
-      {mode === "repack" && (
+      {/* Hidden in both modes for now — `savedRows` is still loaded for the Booking ID dropdown's "done" check. */}
+      {SHOW_SAVED_BUNDLE_LIST && mode === "repack" && (
         <div className="cc-card" style={{ padding: 18, marginTop: 16 }}>
           <div className="cc-panel-title" style={{ marginBottom: 4 }}>
             {mode === "repack" ? "Saved bundle list" : "Saved packing lists"}
