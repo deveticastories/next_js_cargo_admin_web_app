@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { DataTable } from "@/components/ui/DataTable";
 import { SkeletonTable } from "@/components/ui/Skeleton";
+import type { PackingList } from "@/types";
 import { api, ApiError } from "@/utils/apiClient";
 import { fmtDate } from "@/utils/format";
 
@@ -26,24 +27,36 @@ export function ReadyToStuffScreen() {
   const [error, setError] = useState("");
   // Bundle numbers with a saved packing list (Package ready or Repacking), per booking id.
   const [packedByBooking, setPackedByBooking] = useState<Map<string, Set<number>>>(new Map());
+  // Bundle mark IDs of those saved bundles, per booking id, in bundle order.
+  const [markIdsByBooking, setMarkIdsByBooking] = useState<Map<string, number[]>>(new Map());
   const [loadingPacked, setLoadingPacked] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     api
-      .get<{ booking: string; bundleNumber: number; readySaved?: boolean; repackedBy?: string }[]>("/packing-lists")
+      .get<PackingList[]>("/packing-lists")
       .then((lists) => {
         if (cancelled) return;
         const map = new Map<string, Set<number>>();
+        const markIds = new Map<string, number[]>();
+        // The API returns lists sorted by bundle number, so each booking's mark IDs come out in bundle order.
         for (const l of lists) {
           if (!l.readySaved && !l.repackedBy) continue;
           if (!map.has(l.booking)) map.set(l.booking, new Set());
           map.get(l.booking)!.add(l.bundleNumber);
+          if (l.bundleMarkId) {
+            if (!markIds.has(l.booking)) markIds.set(l.booking, []);
+            markIds.get(l.booking)!.push(l.bundleMarkId);
+          }
         }
         setPackedByBooking(map);
+        setMarkIdsByBooking(markIds);
       })
       .catch(() => {
-        if (!cancelled) setPackedByBooking(new Map());
+        if (!cancelled) {
+          setPackedByBooking(new Map());
+          setMarkIdsByBooking(new Map());
+        }
       })
       .finally(() => {
         if (!cancelled) setLoadingPacked(false);
@@ -106,7 +119,7 @@ export function ReadyToStuffScreen() {
       </div>
       {error && <div className="cc-alert-error" style={{ margin: "0 18px 12px" }}>{error}</div>}
       {bookings.loading || loadingPacked ? (
-        <SkeletonTable columns={8} />
+        <SkeletonTable columns={9} />
       ) : (
         <DataTable
           emptyText="No bookings are packed and ready to be stuffed."
@@ -120,6 +133,11 @@ export function ReadyToStuffScreen() {
             { key: "sender", label: "Sender" },
             { key: "receiver", label: "Receiver" },
             { key: "bundles", label: "Bundles", render: (r) => r.actualBundle || r.bundleCount },
+            {
+              key: "bundleMarkIds",
+              label: "Bundle mark IDs",
+              render: (r) => markIdsByBooking.get(r.id)?.join(", ") || "—",
+            },
             { key: "date", label: "Date", render: (r) => fmtDate(r.date) },
             { key: "packageListStatus", label: "Package list status", render: () => <Badge value="Added" /> },
             { key: "status", label: "Status", render: () => <Badge value="Pending" /> },

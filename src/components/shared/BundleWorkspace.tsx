@@ -26,7 +26,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Download, Plus, Save, X } from "lucide-react";
-import type { Booking, BundleLineItem } from "@/types";
+import type { Booking, BundleLineItem, PackingList } from "@/types";
 import type { ApiCollection } from "@/utils/useApiCollection";
 import { api, ApiError } from "@/utils/apiClient";
 import { fmtDate } from "@/utils/format";
@@ -44,6 +44,8 @@ interface SavedItemRow extends BundleLineItem {
   id: string;
   bookingCode: string;
   bundleNumber: number;
+  /** Server-assigned bundle mark ID — undefined until the bundle is actually saved (repack: Confirm). */
+  bundleMarkId?: number;
   /** Repacking tables only. */
   repackedBy?: string;
 }
@@ -51,6 +53,7 @@ interface SavedItemRow extends BundleLineItem {
 const SAVED_ITEM_COLUMNS: { key: keyof SavedItemRow; label: string }[] = [
   { key: "bookingCode", label: "Booking ID" },
   { key: "bundleNumber", label: "Bundle" },
+  { key: "bundleMarkId", label: "Bundle mark ID" },
   { key: "product", label: "Product name" },
   { key: "qty", label: "Qty" },
   { key: "fabric", label: "Fabric" },
@@ -137,7 +140,7 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
   // Repack mode only: bundles "Save" has added to the "Added bundles" list for
   // review, but hasn't yet written to the database — "Confirm" there is what
   // actually persists them (see `confirmBundles`).
-  const [stagedBundles, setStagedBundles] = useState<{ bundleNumber: number; items: BundleLineItem[] }[]>([]);
+  const [stagedBundles, setStagedBundles] = useState<{ bundleNumber: number; items: BundleLineItem[]; bundleMarkId?: number }[]>([]);
   // Repack mode only: true once Confirm has saved the current "Added bundles" — the table stays
   // up (so its packing list PDF can still be downloaded) but Confirm is locked until another
   // bundle is added. Reset on selecting a booking.
@@ -187,9 +190,7 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
   const loadSavedRows = async () => {
     setLoadingSavedRows(true);
     try {
-      const lists = await api.get<{ id: string; booking: string; bundleNumber: number; items: BundleLineItem[]; repackedBy?: string; readySaved?: boolean }[]>(
-        "/packing-lists"
-      );
+      const lists = await api.get<PackingList[]>("/packing-lists");
       const scopedBookings = new Map(savedListBookings.map((b) => [b.id, b]));
       const rows: SavedItemRow[] = [];
       const readySaved = new Map<string, Set<number>>();
@@ -203,7 +204,7 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
         list.items.forEach((item, index) => {
           // Skip a still-blank default row — nothing's actually been recorded for it yet.
           if (!item.product && !item.qty && !item.fabric && !item.description) return;
-          rows.push({ id: `${list.id}-${index}`, bookingCode: forBooking.code, bundleNumber: list.bundleNumber, repackedBy: list.repackedBy ?? "", ...item });
+          rows.push({ id: `${list.id}-${index}`, bookingCode: forBooking.code, bundleNumber: list.bundleNumber, bundleMarkId: list.bundleMarkId, repackedBy: list.repackedBy ?? "", ...item });
         });
       }
       setSavedRows(rows);
@@ -338,13 +339,19 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
     setSavedMessage("");
   };
 
-  const persistLines = () => api.post("/packing-lists", { bookingId, bundleNumber: Number(bundle), items: lines, readySaved: true });
+  const persistLines = () => api.post<PackingList>("/packing-lists", { bookingId, bundleNumber: Number(bundle), items: lines, readySaved: true });
 
-  /** Writes each given bundle to the database (used by both "Confirm" and "Complete repacking"). */
+  /**
+   * Writes each given bundle to the database (used by both "Confirm" and "Complete repacking"),
+   * then records the bundle mark ID the server handed each one so "Added bundles" can show it.
+   */
   const persistStagedBundles = async (bundlesToSave: { bundleNumber: number; items: BundleLineItem[] }[]) => {
+    const markIds = new Map<number, number | undefined>();
     for (const b of bundlesToSave) {
-      await api.post("/packing-lists", { bookingId, bundleNumber: b.bundleNumber, items: b.items, repackedBy: repackedBy.trim() });
+      const saved = await api.post<PackingList>("/packing-lists", { bookingId, bundleNumber: b.bundleNumber, items: b.items, repackedBy: repackedBy.trim() });
+      markIds.set(b.bundleNumber, saved.bundleMarkId);
     }
+    setStagedBundles((prev) => prev.map((b) => (markIds.has(b.bundleNumber) ? { ...b, bundleMarkId: markIds.get(b.bundleNumber) } : b)));
   };
 
   /**
@@ -358,7 +365,11 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
     if (mode === "repack") {
       const bundleNumber = Number(bundle);
       setStagedBundles((prev) =>
-        [...prev.filter((b) => b.bundleNumber !== bundleNumber), { bundleNumber, items: lines }].sort(
+        // Keeps the bundle's mark ID if it was already confirmed once — the server won't change it.
+        [
+          ...prev.filter((b) => b.bundleNumber !== bundleNumber),
+          { bundleNumber, items: lines, bundleMarkId: prev.find((b) => b.bundleNumber === bundleNumber)?.bundleMarkId },
+        ].sort(
           (a, b) => a.bundleNumber - b.bundleNumber
         )
       );
@@ -386,13 +397,15 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
     setError("");
     setSavedMessage("");
     try {
-      await persistLines();
-      setSavedMessage(`Saved ${filledCount} item${filledCount === 1 ? "" : "s"} for Bundle ${bundle}.`);
+      const saved = await persistLines();
+      setSavedMessage(
+        `Saved ${filledCount} item${filledCount === 1 ? "" : "s"} for Bundle ${bundle}${saved.bundleMarkId ? ` (bundle mark ID ${saved.bundleMarkId})` : ""}.`
+      );
       // Add this bundle's items to "Added items" (replacing any earlier Save of the same bundle).
       const bundleNumber = Number(bundle);
       const newRows: SavedItemRow[] = lines
         .filter((l) => l.product || l.qty || l.fabric || l.description)
-        .map((l, index) => ({ id: `${bookingId}-${bundleNumber}-${index}`, bookingCode: booking?.code ?? bookingId, bundleNumber, ...l }));
+        .map((l, index) => ({ id: `${bookingId}-${bundleNumber}-${index}`, bookingCode: booking?.code ?? bookingId, bundleNumber, bundleMarkId: saved.bundleMarkId, ...l }));
       setAddedItems((prev) => [...prev.filter((r) => r.bundleNumber !== bundleNumber), ...newRows].sort((x, y) => x.bundleNumber - y.bundleNumber));
       // The entered packing list is saved, so clear the form for the next entry.
       setLines([emptyLine()]);
@@ -540,6 +553,7 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
           id: `staged-${b.bundleNumber}-${index}`,
           bookingCode: booking?.code ?? bookingId,
           bundleNumber: b.bundleNumber,
+          bundleMarkId: b.bundleMarkId,
           repackedBy,
           ...item,
         }))

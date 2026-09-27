@@ -24,9 +24,9 @@ interface Doc {
   autoTable: typeof import("jspdf-autotable").default;
 }
 
-async function newDoc(title: string): Promise<Doc> {
+async function newDoc(title: string, orientation: "portrait" | "landscape" = "portrait"): Promise<Doc> {
   const [{ jsPDF }, { default: autoTable }] = await Promise.all([import("jspdf"), import("jspdf-autotable")]);
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const doc = new jsPDF({ unit: "mm", format: "a4", orientation });
   doc.setFont("times", "bold");
   doc.setFontSize(22);
   doc.text(COMPANY, MARGIN, 24);
@@ -269,5 +269,97 @@ export async function downloadPackingListPdf(filename: string, data: PackingList
   d.doc.setFont("times", "italic");
   d.doc.setFontSize(9.5);
   d.doc.text("Note: Each Bundle No covers all product lines listed beside it; add more rows under the same bundle for additional products.", MARGIN, end + 5);
+  d.doc.save(filename);
+}
+
+export interface ContainerManifestData {
+  containerCode: string;
+  containerName: string;
+  stuffedDate: string;
+  rows: {
+    bookingCode: string;
+    sender: PartyDetails;
+    receiver: PartyDetails;
+    bundles: number;
+    bundleMarks: string;
+    receivableAmount?: number;
+    deliveryPartnerAmount?: number;
+    paymentStatus: string;
+  }[];
+}
+
+/** Stuffing screen's container detail list — every booking loaded into one container. Landscape, to fit its nine columns. */
+export async function downloadContainerManifestPdf(filename: string, data: ContainerManifestData): Promise<void> {
+  const d = await newDoc("CONTAINER BOOKING LIST", "landscape");
+  let y = infoRow(d, 44, ["Container ID", data.containerCode, "Container Name", data.containerName]);
+  y = infoRow(d, y, ["Stuffed Date", data.stuffedDate, "No. of Bookings", String(data.rows.length)]);
+  const party = (p: PartyDetails) => [p.name, ...p.lines.filter(Boolean)].join("\n");
+  const amount = (n?: number) => (n === undefined ? "-" : pdfMoney(n));
+  const sum = (pick: (r: ContainerManifestData["rows"][number]) => number | undefined) =>
+    data.rows.reduce((total, r) => total + (pick(r) ?? 0), 0);
+  d.autoTable(d.doc, {
+    startY: y + 8,
+    theme: "grid",
+    styles: { ...baseStyles, fontSize: 9.5 },
+    head: [["Sl No", "Booking ID", "Sender Details", "Receiver Details", "No. of Bundles", "Bundle Mark", "Total Receivable", "Delivery Partner Amt", "Payment Status"]],
+    headStyles,
+    body: data.rows.map((r, i) => [
+      String(i + 1),
+      r.bookingCode,
+      party(r.sender),
+      party(r.receiver),
+      String(r.bundles),
+      r.bundleMarks || "-",
+      amount(r.receivableAmount),
+      amount(r.deliveryPartnerAmount),
+      r.paymentStatus,
+    ]),
+    foot: [
+      [
+        { content: "Total", colSpan: 4 },
+        String(sum((r) => r.bundles)),
+        "",
+        pdfMoney(sum((r) => r.receivableAmount)),
+        pdfMoney(sum((r) => r.deliveryPartnerAmount)),
+        "",
+      ],
+    ],
+    footStyles: headStyles,
+    showFoot: "lastPage",
+    columnStyles: { 0: { cellWidth: 12 }, 4: { cellWidth: 20 } },
+    margin: { left: MARGIN, right: MARGIN },
+  });
+  d.doc.save(filename);
+}
+
+export interface TablePdfData {
+  title: string;
+  /** Label/value pairs shown above the table, two per row. */
+  info: [string, string][];
+  head: string[];
+  body: string[][];
+  /** Optional totals row, same length as `head`. */
+  foot?: string[];
+}
+
+/** Generic landscape letterhead + single table — the Stuffing screen's booking and bundle breakdowns. */
+export async function downloadTablePdf(filename: string, data: TablePdfData): Promise<void> {
+  const d = await newDoc(data.title, "landscape");
+  let y = 44;
+  for (let i = 0; i < data.info.length; i += 2) {
+    const [a, b = ["", ""]] = [data.info[i], data.info[i + 1]];
+    y = infoRow(d, y, [a[0], a[1], b[0], b[1]]);
+  }
+  d.autoTable(d.doc, {
+    startY: y + 8,
+    theme: "grid",
+    // Wide tables (15 columns) need a smaller font to fit a landscape A4.
+    styles: { ...baseStyles, fontSize: data.head.length > 10 ? 8 : 9.5, cellPadding: data.head.length > 10 ? 1.6 : 2.4 },
+    head: [data.head],
+    headStyles,
+    body: data.body,
+    ...(data.foot ? { foot: [data.foot], footStyles: headStyles, showFoot: "lastPage" as const } : {}),
+    margin: { left: MARGIN, right: MARGIN },
+  });
   d.doc.save(filename);
 }

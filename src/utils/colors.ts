@@ -80,4 +80,5 @@ export const STATUS_STYLES: Record<string, StatusStyle> = {
   "Without Bill": { bg: colors.warnBg, fg: colors.warn },
   Paid: { bg: colors.successBg, fg: colors.success },
   Unpaid: { bg: colors.dangerBg, fg: colors.danger },
+  "Partially paid": { bg: colors.warnBg, fg: colors.warn },
 };

@@ -252,6 +252,8 @@ export interface PackingList {
   repackedBy?: string;
   /** True once saved from the Ready to ship screen. */
   readySaved?: boolean;
+  /** Running bundle mark ID (1, 2, 3, ...) assigned by the server on the bundle's first save. */
+  bundleMarkId?: number;
 }
 
 /** One "load these bookings into this container" event. Mirrors `Stuffing` in the backend. */
