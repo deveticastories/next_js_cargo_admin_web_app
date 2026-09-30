@@ -6,6 +6,7 @@ import { withCode } from "@/backend/utils/generateCode";
 const containerSchema = new Schema(
   {
     company: { type: String, required: true, trim: true },
+    stuffingCode: { type: String, trim: true },
     stuffingDate: { type: Date, required: true },
     cutOffDate: { type: Date },
     etaCok: { type: Date },

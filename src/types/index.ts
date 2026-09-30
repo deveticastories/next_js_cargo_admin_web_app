@@ -56,6 +56,7 @@ export interface Sender extends BaseRecord {
 export interface Receiver extends BaseRecord {
   name: string;
   whatsapp: string;
+  alternativeNo?: string;
   country: string;
   location: string;
   discount?: string;
@@ -177,6 +178,7 @@ export interface Container extends Omit<BaseRecord, "status"> {
   /** "Stuffed" once bookings have been loaded into it (set by `POST /api/stuffings`). */
   status?: Status | "Stuffed";
   company: string;
+  stuffingCode?: string;
   stuffingDate: string;
   cutOffDate?: string;
   etaCok?: string;

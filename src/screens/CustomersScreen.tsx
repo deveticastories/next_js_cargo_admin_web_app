@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useCargoData } from "@/components/providers/CargoDataProvider";
 import { MasterView } from "@/components/shared/MasterView";
 import { Button } from "@/components/ui/Button";
+import { money } from "@/utils/format";
 
 /** Senders (who book shipments) and receivers (who collect them), as two tabs. */
 export function CustomersScreen() {
@@ -54,16 +55,18 @@ export function CustomersScreen() {
           fields={[
             { key: "name", label: "Name", required: true },
             { key: "whatsapp", label: "WhatsApp number", required: true },
+            { key: "alternativeNo", label: "Alternative number" },
             { key: "country", label: "Country", required: true },
             { key: "location", label: "Location", required: true },
-            { key: "discount", label: "Discount (%)", type: "number" },
+            { key: "discount", label: "Discount (amount)", type: "number" },
           ]}
           columns={[
             { key: "name", label: "Name" },
             { key: "whatsapp", label: "WhatsApp" },
+            { key: "alternativeNo", label: "Alternative No", render: (r) => r.alternativeNo || "—" },
             { key: "country", label: "Country" },
             { key: "location", label: "Location" },
-            { key: "discount", label: "Discount", render: (r) => `${r.discount || 0}%` },
+            { key: "discount", label: "Discount", render: (r) => money(Number(r.discount || 0)) },
           ]}
           collection={receivers}
           autoOpenNew={autoOpenNewReceiver}

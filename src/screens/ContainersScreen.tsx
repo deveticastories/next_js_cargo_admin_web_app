@@ -16,6 +16,7 @@ export function ContainersScreen() {
       desc="Containers moving between Kochi and the UAE"
       fields={[
         { key: "company", label: "Shipping line / company", required: true },
+        { key: "stuffingCode", label: "Stuffing code" },
         { key: "stuffingDate", label: "Stuffing date", type: "date", required: true },
         { key: "cutOffDate", label: "Cut-off date", type: "date" },
         { key: "etaCok", label: "ETA Kochi", type: "date" },
@@ -25,6 +26,7 @@ export function ContainersScreen() {
       columns={[
         { key: "code", label: "Container ID" },
         { key: "company", label: "Company" },
+        { key: "stuffingCode", label: "Stuffing code", render: (r) => r.stuffingCode || "—" },
         { key: "stuffingDate", label: "Stuffing", render: (r) => fmtDate(r.stuffingDate) },
         { key: "cutOffDate", label: "Cut-off", render: (r) => fmtDate(r.cutOffDate) },
         { key: "etaCok", label: "ETA COK", render: (r) => fmtDate(r.etaCok) },

@@ -17,7 +17,8 @@ export function PickupAssignScreen() {
   // Clicking a "Pending" row's Pickup status badge opens this popup to record how many
   // bundles were actually collected, then marks that row "Collected". Once collected,
   // the badge is locked — no popup, no further pickup-status changes from the table.
-  // The same popup also opens from a Collected row's "Collected bundle" number, to correct that count.
+  // The same popup also opens from a Collected row's "Collected bundle" number, to correct that count —
+  // unless every assigned bundle was collected (see `isFullyCollected`), which locks the count.
   const [collectRow, setCollectRow] = useState<PickupAssign | null>(null);
   const [collectedBundleInput, setCollectedBundleInput] = useState("");
   const [collecting, setCollecting] = useState(false);
@@ -30,7 +31,12 @@ export function PickupAssignScreen() {
   // Set when a Paid badge is clicked — Paid is final, so this just explains why nothing happens.
   const [paidLockedRow, setPaidLockedRow] = useState<PickupAssign | null>(null);
 
+  // All assigned bundles collected (e.g. Bundles 2, Collected 2) — the count is final.
+  const isFullyCollected = (row: PickupAssign) =>
+    row.pickupStatus === "Collected" && Number(row.collectedBundle || 0) >= Number(row.bundleCount || 0);
+
   const openCollect = (row: PickupAssign) => {
+    if (isFullyCollected(row)) return;
     setCollectRow(row);
     // Editing an already-collected row starts from its saved count.
     setCollectedBundleInput(row.pickupStatus === "Collected" && row.collectedBundle ? String(row.collectedBundle) : "");
@@ -137,7 +143,9 @@ export function PickupAssignScreen() {
             key: "collectedBundle",
             label: "Collected bundle",
             render: (r) =>
-              r.pickupStatus === "Collected" ? (
+              isFullyCollected(r) ? (
+                <span title="All bundles collected — can't be changed">{r.collectedBundle || 0}</span>
+              ) : r.pickupStatus === "Collected" ? (
                 <span
                   onClick={() => openCollect(r)}
                   style={{ cursor: "pointer", color: "var(--accent)", fontWeight: 600, textDecoration: "underline dotted" }}

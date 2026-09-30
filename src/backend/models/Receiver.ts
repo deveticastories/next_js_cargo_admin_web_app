@@ -7,6 +7,7 @@ const receiverSchema = new Schema(
   {
     name: { type: String, required: true, trim: true },
     whatsapp: { type: String, required: true, unique: true, trim: true },
+    alternativeNo: { type: String, trim: true },
     country: { type: String, required: true, trim: true },
     location: { type: String, required: true, trim: true },
     discount: { type: String, default: "0" },

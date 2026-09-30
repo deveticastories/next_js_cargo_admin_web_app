@@ -727,6 +727,150 @@ table.cc-table tr:hover td {
   background: var(--accent-soft);
 }
 
+/* Multi-pick variant (`MultiSearchSelect`) — chips + inline search in the control. */
+.cc-multiselect-control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 5px 8px 5px 10px;
+  cursor: text;
+}
+.cc-multiselect-control.open {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.cc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px 3px 9px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+  font-size: 12.5px;
+  font-weight: 600;
+  animation: cc-scale-in 0.12s ease;
+}
+.cc-chip button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.cc-chip button:hover {
+  background: var(--accent);
+  color: #fff;
+}
+.cc-multiselect-input {
+  flex: 1;
+  min-width: 110px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cc-multiselect-input input {
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  width: 100%;
+  padding: 4px 0;
+  color: var(--text);
+  font-family: var(--font-body), sans-serif;
+}
+.cc-multiselect-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+.cc-multiselect-clear {
+  display: inline-flex;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  padding: 3px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.cc-multiselect-clear:hover {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+.cc-multiselect-caret {
+  transition: transform 0.15s ease;
+}
+.cc-multiselect-caret.open {
+  transform: rotate(180deg);
+}
+.cc-multiselect-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-soft);
+  border-bottom: 1px solid var(--border);
+  background: oklch(0.98 0.01 228);
+}
+.cc-multiselect-head button {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+.cc-multiselect-head button:hover {
+  text-decoration: underline;
+}
+.cc-multiselect-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.cc-multiselect-option.highlight {
+  background: var(--accent-soft);
+}
+.cc-multiselect-tick {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  color: #fff;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.cc-multiselect-tick.on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.cc-multiselect-label {
+  display: block;
+  font-weight: 600;
+}
+.cc-multiselect-hint {
+  display: block;
+  font-size: 12px;
+  color: var(--text-soft);
+  font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .cc-error {
   font-size: 12px;
   color: var(--danger);
