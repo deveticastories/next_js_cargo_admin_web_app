@@ -16,13 +16,13 @@ import { SkeletonTable } from "@/components/ui/Skeleton";
 import { ApiError } from "@/utils/apiClient";
 import { getAllPackages, packageBookingId } from "@/services/PackageServices";
 import { fmtDate, todayISO, toDateInputValue } from "@/utils/format";
-import type { Booking } from "@/types";
+import type { Booking, PickupAssign } from "@/types";
 
 const PICKUP_VIA_OPTIONS = ["Our Pickup Boy", "Direct to Store"] as const;
 
 /** Create and track shipment bookings — the entry point of the whole cargo workflow. */
 export function BookingScreen() {
-  const { bookings, senders, receivers, pickupAssigns } = useCargoData();
+  const { bookings, senders, receivers, pickupAssigns, pickupPartners } = useCargoData();
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [modalRow, setModalRow] = useState<string | "new" | null>(null);
@@ -68,13 +68,17 @@ export function BookingScreen() {
     router.push(`/admin/customers?${params.toString()}`);
   };
 
-  // "Pick up via" is either our own pickup boy or the sender dropping off at the store.
-  // For "Our Pickup Boy" the booking still has to point at a real Pickup Assign record
-  // (cargo-backend's `pickupOption` is a required PickupAssign ref), chosen by its LR No.
-  const pickupOptionLabels: Record<string, string> = {};
-  for (const p of pickupAssigns.items) pickupOptionLabels[p.lrNo] = `${p.lrNo} — ${p.transport}`;
-  const pickupOptions = pickupAssigns.items.map((p) => p.lrNo);
-  const addPickupAssignFromSearch = () => router.push("/admin/pickup-assign");
+  // "Pick up via" is our own pickup boy, the sender dropping off at the store, or one of
+  // the active pickup partners. cargo-backend still requires every booking to reference a
+  // Pickup Assign (`pickupOption`), but the form no longer asks for one — on save the booking
+  // is linked to the most recent assign (that partner's most recent, when a partner is picked).
+  const partnerNames = pickupPartners.items.filter((p) => p.status !== "Inactive").map((p) => p.name);
+  const pickupViaOptions = [...new Set<string>([...PICKUP_VIA_OPTIONS, ...partnerNames])];
+  const latestPickupAssign = (partner: string | null) =>
+    pickupAssigns.items
+      .filter((p) => !partner || p.transport === partner)
+      // Mongo ObjectIds start with their creation time, so the largest id is the newest record.
+      .reduce<PickupAssign | undefined>((latest, p) => (!latest || p.id > latest.id ? p : latest), undefined);
   const filtered = bookings.items.filter((b) =>
     Object.values(b).some((v) => String(v).toLowerCase().includes(query.toLowerCase()))
   );
@@ -119,8 +123,15 @@ export function BookingScreen() {
       setError("Direct to Store bookings can't be saved yet — the backend still requires a pickup assign.");
       return;
     }
-    if (!form.pickupOption) {
-      setError("Select the pickup assign (LR No) for this booking.");
+    const partner = partnerNames.includes(form.pickupVia as string) ? (form.pickupVia as string) : null;
+    // Editing keeps the booking's existing assign unless "Pick up via" was changed (which clears it).
+    const pickupOption = (form.pickupOption as string) || latestPickupAssign(partner)?.lrNo;
+    if (!pickupOption) {
+      setError(
+        partner
+          ? `No pickup assign exists for ${partner} yet — create one on the Pickup assign screen first.`
+          : "No pickup assign exists yet — create one on the Pickup assign screen first."
+      );
       return;
     }
     // Each extra charge only applies under its own condition — zero it out
@@ -130,6 +141,7 @@ export function BookingScreen() {
     // "Branded" after a brand handling charge was entered).
     const payload = {
       ...form,
+      pickupOption,
       brandHandlingCharge: form.productType === "Branded" ? Number(form.brandHandlingCharge) || 0 : 0,
       pickupCharge: form.billOption === "Without Bill" ? Number(form.pickupCharge) || 0 : 0,
       bundleHandlingCharge: Number(form.bundleCount) < 5 ? Number(form.bundleHandlingCharge) || 0 : 0,
@@ -245,25 +257,13 @@ export function BookingScreen() {
               onCreateNew={(q) => addCustomerFromSearch("receiver", q)}
             />
           </div>
-          <Field
-            field={{ key: "pickupVia", label: "Pick up via", type: "select", options: [...PICKUP_VIA_OPTIONS] }}
-            value={form.pickupVia}
-            onChange={(k, v) =>
-              setForm({ ...form, [k]: v, ...(v !== "Our Pickup Boy" && { pickupOption: "" }) })
-            }
+          <SearchableSelect
+            label="Pick up via"
+            value={(form.pickupVia as string) ?? ""}
+            options={pickupViaOptions}
+            placeholder="Search pickup partner"
+            onChange={(v) => setForm({ ...form, pickupVia: v, ...(v !== form.pickupVia && { pickupOption: "" }) })}
           />
-          {form.pickupVia === "Our Pickup Boy" && (
-            <SearchableSelect
-              label="Pickup assign"
-              value={(form.pickupOption as string) ?? ""}
-              options={pickupOptions}
-              optionLabels={pickupOptionLabels}
-              placeholder="Search LR No / transport partner"
-              createLabel="Add new pickup assign"
-              onChange={(v) => set("pickupOption", v)}
-              onCreateNew={addPickupAssignFromSearch}
-            />
-          )}
           <div className="cc-grid-2">
             <Field field={{ key: "date", label: "Booking date", type: "date" }} value={form.date} onChange={set} />
             <Field field={{ key: "billOption", label: "Bill option", type: "select", options: ["With Bill", "Without Bill"] }} value={form.billOption} onChange={set} />
