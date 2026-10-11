@@ -15,8 +15,9 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { DataTable } from "@/components/ui/DataTable";
 import { SkeletonTable } from "@/components/ui/Skeleton";
-import type { PackingList } from "@/types";
-import { api, ApiError } from "@/utils/apiClient";
+import { ApiError } from "@/utils/apiClient";
+import { computeBundleMarkIds, getAllPackages, packageBookingId } from "@/services/PackageServices";
+import { updateStuffStatus } from "@/services/BookingServices";
 import { fmtDate } from "@/utils/format";
 
 export function ReadyToStuffScreen() {
@@ -33,20 +34,24 @@ export function ReadyToStuffScreen() {
 
   useEffect(() => {
     let cancelled = false;
-    api
-      .get<PackingList[]>("/packing-lists")
-      .then((lists) => {
+    getAllPackages()
+      .then((packages) => {
         if (cancelled) return;
+        const globalMarkIds = computeBundleMarkIds(packages);
         const map = new Map<string, Set<number>>();
         const markIds = new Map<string, number[]>();
-        // The API returns lists sorted by bundle number, so each booking's mark IDs come out in bundle order.
-        for (const l of lists) {
-          if (!l.readySaved && !l.repackedBy) continue;
-          if (!map.has(l.booking)) map.set(l.booking, new Set());
-          map.get(l.booking)!.add(l.bundleNumber);
-          if (l.bundleMarkId) {
-            if (!markIds.has(l.booking)) markIds.set(l.booking, []);
-            markIds.get(l.booking)!.push(l.bundleMarkId);
+        for (const pkg of packages) {
+          const bookingId = packageBookingId(pkg);
+          if (!map.has(bookingId)) map.set(bookingId, new Set());
+          // Each package's own bundles are already kept in bundleNo order.
+          const sortedBundles = [...pkg.bundles].sort((a, b) => a.bundleNo - b.bundleNo);
+          for (const bundle of sortedBundles) {
+            map.get(bookingId)!.add(bundle.bundleNo);
+            const markId = bundle._id ? globalMarkIds.get(bundle._id) : undefined;
+            if (markId) {
+              if (!markIds.has(bookingId)) markIds.set(bookingId, []);
+              markIds.get(bookingId)!.push(markId);
+            }
           }
         }
         setPackedByBooking(map);
@@ -84,12 +89,22 @@ export function ReadyToStuffScreen() {
     setMoving(true);
     setError("");
     try {
-      const updated = await Promise.all(selectedIds.map((id) => bookings.update(id, { sentToStuffing: true })));
-      // Only move on once the server has actually recorded it — otherwise the bookings would
-      // vanish from here without ever showing up on Stuffing.
-      const notSaved = updated.filter((b) => !b.sentToStuffing);
-      if (notSaved.length) {
-        setError(`Couldn't move ${notSaved.map((b) => b.code).join(", ")} to stuffing — please try again.`);
+      const failed: string[] = [];
+      await Promise.all(
+        selectedIds.map(async (id) => {
+          try {
+            await updateStuffStatus(id, "Ready to Stuff");
+          } catch {
+            const code = rows.find((b) => b.id === id)?.code ?? id;
+            failed.push(code);
+          }
+        })
+      );
+      // `updateStuffStatus` bypasses the generic `update()` wrapper, so local state needs an
+      // explicit refetch before the bookings that succeeded actually drop off this list.
+      await bookings.refetch();
+      if (failed.length) {
+        setError(`Couldn't move ${failed.join(", ")} to stuffing — please try again.`);
         return;
       }
       setSelected([]);

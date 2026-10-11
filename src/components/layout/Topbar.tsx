@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { LogOut, Menu, RotateCw } from "lucide-react";
 import { getBreadcrumb } from "@/utils/navigation";
-import { api } from "@/utils/apiClient";
+import { logout as logoutSession } from "@/services/AuthenticationServices";
 import { Button } from "@/components/ui/Button";
+import { refreshCargoData } from "@/components/providers/CargoDataProvider";
 
 export interface TopbarProps {
   onOpenMenu: () => void;
@@ -18,6 +19,7 @@ export function Topbar({ onOpenMenu }: TopbarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [stamp, setStamp] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     // Computed client-side only (avoids a server/client render mismatch on
@@ -26,8 +28,21 @@ export function Topbar({ onOpenMenu }: TopbarProps) {
     queueMicrotask(() => setStamp(stampFormat.format(new Date())));
   }, [pathname]);
 
-  const logout = async () => {
-    await api.post("/auth/logout").catch(() => undefined);
+  const refresh = async () => {
+    setRefreshing(true);
+    router.refresh();
+    try {
+      await refreshCargoData();
+      setStamp(stampFormat.format(new Date()));
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const logout = () => {
+    // cargo-backend's JWT is stateless and has no `/auth/logout` endpoint —
+    // signing out just means dropping the token locally.
+    logoutSession();
     router.replace("/login");
     router.refresh();
   };
@@ -41,7 +56,7 @@ export function Topbar({ onOpenMenu }: TopbarProps) {
       <div style={{ flex: 1 }} />
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         {stamp && <span className="cc-topbar-stamp">Updated {stamp}</span>}
-        <Button size="sm" onClick={() => router.refresh()}>
+        <Button size="sm" onClick={refresh} loading={refreshing}>
           <RotateCw size={14} /> Refresh
         </Button>
         <Button size="sm" onClick={logout} style={{ color: "var(--danger)" }}>

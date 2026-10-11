@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useCargoData, type CargoData } from "@/components/providers/CargoDataProvider";
+import { useCargoDataStatus, type CargoData } from "@/components/providers/CargoDataProvider";
 import { Button } from "@/components/ui/Button";
 
 /** Human names for each collection, used in the banner's "Couldn't load …" message. */
@@ -51,7 +51,7 @@ function useOnline(): boolean {
  * whatever data it already had.
  */
 export function DataStatusBanner() {
-  const data = useCargoData();
+  const data = useCargoDataStatus();
   const online = useOnline();
   const [retrying, setRetrying] = useState(false);
 

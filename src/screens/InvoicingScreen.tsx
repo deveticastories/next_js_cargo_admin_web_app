@@ -5,7 +5,7 @@
  *  - Invoice: route price × bundles, minus the receiver's discount, plus
  *    pickup charge (only when booked without bill) and delivery charge.
  *  - Delivery note: sender, booking date and the recorded packing list
- *    (fetched from `/api/packing-lists`, one bundle per row).
+ *    (fetched from cargo-backend's `/packages` module, one bundle per row).
  */
 
 import { useEffect, useState } from "react";
@@ -15,21 +15,21 @@ import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { MultiSearchSelect } from "@/components/ui/MultiSearchSelect";
-import { api } from "@/utils/apiClient";
+import { flattenPackage, getPackageByBooking, type PackageItemRow } from "@/services/PackageServices";
 import { fmtDate, money } from "@/utils/format";
 import { downloadDeliveryNotePdf, downloadInvoicePdf } from "@/utils/pdf";
-import type { BundleLineItem } from "@/types";
 
-type PackingRow = BundleLineItem & { bundleNumber: number };
+type PackingRow = PackageItemRow;
 
 /** A booking's recorded packing list, flattened to one row per item. */
-async function fetchPackingRows(bookingId: string): Promise<PackingRow[]> {
-  const lists = await api.get<{ bundleNumber: number; items: BundleLineItem[] }[]>(`/packing-lists?bookingId=${bookingId}`);
-  return lists.flatMap((l) => l.items.map((i) => ({ ...i, bundleNumber: l.bundleNumber })));
+async function fetchPackingRows(bookingId: string, masters: { products: { id: string; name: string }[]; fabrics: { id: string; name: string }[] }): Promise<PackingRow[]> {
+  const pkg = await getPackageByBooking(bookingId);
+  return pkg ? flattenPackage(pkg, masters) : [];
 }
 
 export function InvoicingScreen() {
-  const { bookings, senders, receivers, pricing, deliveryPartners, invoices, containers, stuffings } = useCargoData();
+  const { bookings, senders, receivers, pricing, deliveryPartners, invoices, containers, stuffings, products, fabrics } = useCargoData();
+  const masters = { products: products.items, fabrics: fabrics.items };
   const [containerId, setContainerId] = useState("");
   const [bookingId, setBookingId] = useState("");
   const [pickupCharge, setPickupCharge] = useState("0");
@@ -121,10 +121,14 @@ export function InvoicingScreen() {
   useEffect(() => {
     if (!dnMissingKey) return;
     dnMissingKey.split(",").forEach((id) => {
-      fetchPackingRows(id)
+      fetchPackingRows(id, masters)
         .catch(() => [] as PackingRow[])
         .then((rows) => setPackingByBooking((prev) => ({ ...prev, [id]: rows })));
     });
+    // `masters` is rebuilt every render from `products.items`/`fabrics.items` — re-running this
+    // on its identity alone (vs. on the booking selection actually changing) would refetch
+    // every already-cached booking's packing list for no reason.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dnMissingKey]);
 
   /** Downloads one delivery note PDF per selected booking. */
@@ -136,7 +140,7 @@ export function InvoicingScreen() {
     setDnGenerating(true);
     try {
       for (const b of dnSelectedBookings) {
-        const rows = packingByBooking[b.id] ?? (await fetchPackingRows(b.id).catch(() => []));
+        const rows = packingByBooking[b.id] ?? (await fetchPackingRows(b.id, masters).catch(() => []));
         await downloadDeliveryNotePdf(`${b.code}-delivery-note.pdf`, {
           lrNo: b.code,
           bookingDate: fmtDate(b.date),

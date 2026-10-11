@@ -26,9 +26,11 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Download, Plus, Save, X } from "lucide-react";
-import type { Booking, BundleLineItem, PackingList } from "@/types";
+import type { Booking, BundleLineItem } from "@/types";
 import type { ApiCollection } from "@/utils/useApiCollection";
-import { api, ApiError } from "@/utils/apiClient";
+import { ApiError } from "@/utils/apiClient";
+import { computeBundleMarkIds, flattenPackage, getAllPackages, getPackageByBooking, nameOf, packageBookingId, upsertBundle } from "@/services/PackageServices";
+import { markPackageListAdded } from "@/services/BookingServices";
 import { fmtDate } from "@/utils/format";
 import { downloadPackingListPdf } from "@/utils/pdf";
 import { useCargoData } from "@/components/providers/CargoDataProvider";
@@ -190,21 +192,22 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
   const loadSavedRows = async () => {
     setLoadingSavedRows(true);
     try {
-      const lists = await api.get<PackingList[]>("/packing-lists");
+      const packages = await getAllPackages();
+      const markIds = computeBundleMarkIds(packages);
       const scopedBookings = new Map(savedListBookings.map((b) => [b.id, b]));
       const rows: SavedItemRow[] = [];
+      // A bundle existing in a Package at all means it was saved — cargo-backend has no
+      // separate "draft" state and no readySaved/repack distinction (one packing list per
+      // booking, full stop), so unlike the old local store, this no longer distinguishes
+      // "saved from Ready to ship" from "saved from Repacking".
       const readySaved = new Map<string, Set<number>>();
-      for (const list of lists) {
-        const forBooking = scopedBookings.get(list.booking);
+      for (const pkg of packages) {
+        const forBooking = scopedBookings.get(packageBookingId(pkg));
         if (!forBooking) continue;
-        if (list.readySaved) {
-          if (!readySaved.has(forBooking.code)) readySaved.set(forBooking.code, new Set());
-          readySaved.get(forBooking.code)!.add(list.bundleNumber);
-        }
-        list.items.forEach((item, index) => {
-          // Skip a still-blank default row — nothing's actually been recorded for it yet.
-          if (!item.product && !item.qty && !item.fabric && !item.description) return;
-          rows.push({ id: `${list.id}-${index}`, bookingCode: forBooking.code, bundleNumber: list.bundleNumber, bundleMarkId: list.bundleMarkId, repackedBy: list.repackedBy ?? "", ...item });
+        if (!readySaved.has(forBooking.code)) readySaved.set(forBooking.code, new Set());
+        for (const bundle of pkg.bundles) readySaved.get(forBooking.code)!.add(bundle.bundleNo);
+        flattenPackage(pkg, { products: products.items, fabrics: fabrics.items }, markIds).forEach((row, index) => {
+          rows.push({ id: `${pkg._id}-${index}`, bookingCode: forBooking.code, ...row });
         });
       }
       setSavedRows(rows);
@@ -235,9 +238,20 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
   const loadLines = async (id: string, bundleNo: string) => {
     setLoadingList(true);
     try {
-      const lists = await api.get<{ bundleNumber: number; items: BundleLineItem[] }[]>(`/packing-lists?bookingId=${id}`);
-      const match = lists.find((l) => l.bundleNumber === Number(bundleNo));
-      setLines(match?.items.length ? match.items : [emptyLine()]);
+      const pkg = await getPackageByBooking(id);
+      const match = pkg?.bundles.find((b) => b.bundleNo === Number(bundleNo));
+      setLines(
+        match?.products.length
+          ? match.products.map((p) => ({
+              netWeight: String(match.netWeight ?? ""),
+              grossWeight: String(match.grossWeight ?? ""),
+              product: nameOf(p.product, products.items),
+              qty: String(p.quantity ?? ""),
+              fabric: nameOf(p.fabric, fabrics.items),
+              description: p.description ?? "",
+            }))
+          : [emptyLine()]
+      );
     } catch {
       setLines([emptyLine()]);
     } finally {
@@ -339,16 +353,42 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
     setSavedMessage("");
   };
 
-  const persistLines = () => api.post<PackingList>("/packing-lists", { bookingId, bundleNumber: Number(bundle), items: lines, readySaved: true });
+  // cargo-backend requires a real Product on every product line it stores — a line with any
+  // other field filled in (qty, fabric, description) but no product picked can't be saved.
+  const hasLineWithoutProduct = (bundleLines: BundleLineItem[]) =>
+    bundleLines.some((l) => (l.product || l.qty || l.fabric || l.description) && !l.product);
 
   /**
-   * Writes each given bundle to the database (used by both "Confirm" and "Complete repacking"),
-   * then records the bundle mark ID the server handed each one so "Added bundles" can show it.
+   * Upserts one bundle into the booking's Package (creating it on the first bundle ever saved),
+   * then re-derives that bundle's global "bundle mark ID" (see `computeBundleMarkIds` —
+   * cargo-backend has no such field, it's derived from every bundle's real Mongo `_id`).
    */
+  const saveBundle = async (bundleNumber: number, bundleLines: BundleLineItem[], opts: { repackedBy?: string } = {}) => {
+    const bundleProducts = bundleLines
+      .filter((l) => l.product || l.qty || l.fabric || l.description)
+      .map((l) => ({
+        productId: products.items.find((p) => p.name === l.product)?.id ?? "",
+        quantity: Number(l.qty) || 1,
+        fabricId: fabrics.items.find((f) => f.name === l.fabric)?.id,
+        description: l.description || undefined,
+      }));
+    const pkg = await upsertBundle(
+      bookingId,
+      { bundleNumber, netWeight: Number(bundleLines[0]?.netWeight) || 0, grossWeight: Number(bundleLines[0]?.grossWeight) || 0, products: bundleProducts },
+      opts
+    );
+    const savedBundle = pkg.bundles.find((b) => b.bundleNo === bundleNumber);
+    const markIds = computeBundleMarkIds(await getAllPackages());
+    return { bundleMarkId: savedBundle?._id ? markIds.get(savedBundle._id) : undefined, totalBundles: pkg.bundles.length };
+  };
+
+  const persistLines = () => saveBundle(Number(bundle), lines);
+
+  /** Writes each given bundle to the database (used by both "Confirm" and "Complete repacking"). */
   const persistStagedBundles = async (bundlesToSave: { bundleNumber: number; items: BundleLineItem[] }[]) => {
     const markIds = new Map<number, number | undefined>();
     for (const b of bundlesToSave) {
-      const saved = await api.post<PackingList>("/packing-lists", { bookingId, bundleNumber: b.bundleNumber, items: b.items, repackedBy: repackedBy.trim() });
+      const saved = await saveBundle(b.bundleNumber, b.items, { repackedBy: repackedBy.trim() });
       markIds.set(b.bundleNumber, saved.bundleMarkId);
     }
     setStagedBundles((prev) => prev.map((b) => (markIds.has(b.bundleNumber) ? { ...b, bundleMarkId: markIds.get(b.bundleNumber) } : b)));
@@ -363,6 +403,11 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
    */
   const saveItems = async () => {
     if (mode === "repack") {
+      if (hasLineWithoutProduct(lines)) {
+        setSavedMessage("");
+        setError("Each item needs a product selected.");
+        return;
+      }
       const bundleNumber = Number(bundle);
       setStagedBundles((prev) =>
         // Keeps the bundle's mark ID if it was already confirmed once — the server won't change it.
@@ -393,6 +438,11 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
       setError("Add at least one item to the packing list before saving.");
       return;
     }
+    if (hasLineWithoutProduct(lines)) {
+      setSavedMessage("");
+      setError("Each item needs a product selected.");
+      return;
+    }
     setSaving(true);
     setError("");
     setSavedMessage("");
@@ -407,6 +457,10 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
         .filter((l) => l.product || l.qty || l.fabric || l.description)
         .map((l, index) => ({ id: `${bookingId}-${bundleNumber}-${index}`, bookingCode: booking?.code ?? bookingId, bundleNumber, bundleMarkId: saved.bundleMarkId, ...l }));
       setAddedItems((prev) => [...prev.filter((r) => r.bundleNumber !== bundleNumber), ...newRows].sort((x, y) => x.bundleNumber - y.bundleNumber));
+      // Every bundle of the booking now has a saved packing list — tell the backend too.
+      if (booking && saved.totalBundles >= Math.max(1, booking.actualBundle || booking.bundleCount || 1)) {
+        await markPackageListAdded(bookingId).catch(() => {});
+      }
       // The entered packing list is saved, so clear the form for the next entry.
       setLines([emptyLine()]);
       // Hide the Packing list until another bundle is selected.
@@ -446,8 +500,11 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
     try {
       const confirmedCount = stagedBundles.length;
       await persistStagedBundles(stagedBundles);
+      // `actualBundle` isn't sent — cargo-backend derives it (`bundle`) from `bundleCount` +
+      // `packingStatus` itself (see `bookingService.editBooking`).
+      await bookings.update(bookingId, { bundleCount: confirmedCount, repackingStatus: "Ready to Ship" });
       // Every bundle now has a saved packing list (Package list status "Added"), so the booking is Package Ready.
-      await bookings.update(bookingId, { bundleCount: confirmedCount, actualBundle: confirmedCount, repackingStatus: "Ready to Ship" });
+      await markPackageListAdded(bookingId).catch(() => {});
       setAfterCount(String(confirmedCount));
       setSavedMessage(`Confirmed and saved ${confirmedCount} bundle${confirmedCount === 1 ? "" : "s"}.`);
       // "Added bundles" (and Repacked by) stay as they are after Confirm so the packing list

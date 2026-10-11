@@ -1,55 +1,42 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE, verifyAccessToken } from "@/backend/utils/tokens";
-import { setAccessCookie } from "@/backend/utils/authCookies";
-import { mintAccessTokenFromRefresh } from "@/backend/utils/refreshSession";
+import { TOKEN_COOKIE } from "@/services/httpClient";
 
 /**
  * Optimistic auth gate for the admin panel. Runs before every `/admin` or
- * `/login` request and checks the access token's signature/expiry (no
- * database call). Only when the access token is missing/expired but a
- * refresh cookie is present does it hit the database to mint a new access
- * token — otherwise reloading any `/admin` page more than 15 minutes after
- * the last API call would bounce a still-signed-in user to `/login`.
- * The actual authorization check happens again at the data layer
- * (`requireAuth`, called by every API route).
+ * `/login` request and checks the Bearer token's expiry — decoded only, not
+ * verified, since the signing secret lives on cargo-backend and nowhere in
+ * this app. There's nothing to renew: cargo-backend's JWT is a single 1-day
+ * token with no refresh endpoint, so a session that's expired just goes
+ * back to `/login`. The actual authorization check happens again at the
+ * data layer — cargo-backend's own `verifyToken` middleware rejects an
+ * invalid/expired token regardless of what this gate decided.
  *
  * Note: this file is named `proxy.ts`, not `middleware.ts` — Next.js 16
- * renamed the convention (same behavior, new name/export). Proxy runs on
- * the Node.js runtime, so it can use Mongoose.
+ * renamed the convention (same behavior, new name/export).
  */
-export async function proxy(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const token = request.cookies.get(ACCESS_TOKEN_COOKIE)?.value;
-  let isAuthenticated = token ? await isValidAccessToken(token) : false;
+  const token = request.cookies.get(TOKEN_COOKIE)?.value;
+  const isAuthenticated = isValidToken(token);
 
-  let renewedAccessToken: string | null = null;
-  if (!isAuthenticated) {
-    const refreshToken = request.cookies.get(REFRESH_TOKEN_COOKIE)?.value;
-    if (refreshToken) {
-      renewedAccessToken = await mintAccessTokenFromRefresh(refreshToken).catch(() => null);
-      isAuthenticated = renewedAccessToken !== null;
-    }
-  }
-
-  let res: NextResponse;
   if (pathname.startsWith("/admin") && !isAuthenticated) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("from", pathname);
-    res = NextResponse.redirect(loginUrl);
-  } else if (pathname === "/login" && isAuthenticated) {
-    res = NextResponse.redirect(new URL("/admin", request.url));
-  } else {
-    res = NextResponse.next();
+    // A token that's present but no longer valid means the session ran out, not that they never signed in.
+    if (token) loginUrl.searchParams.set("reason", "expired");
+    return NextResponse.redirect(loginUrl);
   }
-
-  if (renewedAccessToken) setAccessCookie(res, renewedAccessToken);
-  return res;
+  if (pathname === "/login" && isAuthenticated) {
+    return NextResponse.redirect(new URL("/admin", request.url));
+  }
+  return NextResponse.next();
 }
 
-async function isValidAccessToken(token: string): Promise<boolean> {
+function isValidToken(token: string | undefined): boolean {
+  if (!token) return false;
   try {
-    await verifyAccessToken(token);
-    return true;
+    const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))) as { exp?: number };
+    return Boolean(payload.exp) && payload.exp! * 1000 > Date.now();
   } catch {
     return false;
   }

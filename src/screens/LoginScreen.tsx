@@ -7,14 +7,16 @@ import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import logoLight from "@/assets/images/logo-light.png";
 import logoTrimmed from "@/assets/images/logo-trimmed.png";
-import { api, ApiError } from "@/utils/apiClient";
+import { ApiError } from "@/services/httpClient";
+import { login } from "@/services/AuthenticationServices";
 
 /**
  * The only screen outside `/admin` — a two-panel layout matching the
  * "Cargo Admin.dc.html" design reference (brand story on the left, form on
- * the right). Signs in via `POST /api/auth/login`, which sets the
- * access/refresh cookies, then sends the admin to wherever they were
- * originally headed (`?from=`, set by `src/proxy.ts`) or `/admin`.
+ * the right). Signs in against cargo-backend's `POST /auth/login`, which
+ * hands back a Bearer token (stored by `AuthenticationServices.login`),
+ * then sends the admin to wherever they were originally headed (`?from=`,
+ * set by `src/proxy.ts`) or `/admin`.
  */
 export function LoginScreen() {
   const searchParams = useSearchParams();
@@ -22,6 +24,8 @@ export function LoginScreen() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  // Set by `expireSession()` (src/services/httpClient.ts) when a token expires or is rejected.
+  const sessionExpired = searchParams.get("reason") === "expired";
   const [submitting, setSubmitting] = useState(false);
 
   const submit = async (e: FormEvent) => {
@@ -33,7 +37,7 @@ export function LoginScreen() {
     setSubmitting(true);
     setError("");
     try {
-      await api.post("/auth/login", { email: email.trim(), password });
+      await login(email.trim(), password);
       const from = searchParams.get("from");
       // Only follow same-site paths — never an absolute or protocol-relative URL.
       const destination = from && from.startsWith("/") && !from.startsWith("//") ? from : "/admin";
@@ -80,7 +84,15 @@ export function LoginScreen() {
             <p className="cc-login-sub">Use your Cargo Admin email and password.</p>
           </div>
 
-          {error && <div className="cc-alert-error">{error}</div>}
+          {error ? (
+            <div className="cc-alert-error">{error}</div>
+          ) : (
+            sessionExpired && (
+              <div className="cc-alert-warn" role="status">
+                Your session has expired. Please sign in again.
+              </div>
+            )
+          )}
 
           <Field
             field={{ key: "email", label: "Email address", type: "email", required: true }}

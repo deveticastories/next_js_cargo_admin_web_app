@@ -6,25 +6,27 @@ import "@/app/admin/admin.css";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
 import { DataStatusBanner } from "@/components/shared/DataStatusBanner";
-import { api } from "@/utils/apiClient";
+import { getCurrentUser } from "@/services/AuthenticationServices";
 import { PAGE_TITLES } from "@/utils/navigation";
+import { useSessionExpiry } from "@/utils/useSessionExpiry";
 
 /**
  * The admin panel's page frame: sidebar + topbar + page head + scrollable
  * content area. Wraps every route under `/admin` (see
- * `src/app/admin/layout.tsx`). Fetches the signed-in admin's identity once
- * here and hands it down to `Sidebar`, instead of every screen re-fetching it.
+ * `src/app/admin/layout.tsx`). cargo-backend has no `/auth/me` endpoint, so
+ * the signed-in admin's identity is read back from what login cached
+ * locally (see `AuthenticationServices`) instead of a network call.
  */
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [email, setEmail] = useState("");
+  useSessionExpiry();
 
   useEffect(() => {
-    api
-      .get<{ email: string }>("/auth/me")
-      .then((me) => setEmail(me.email))
-      .catch(() => setEmail(""));
+    // Deferred a tick so the setState lands in its own microtask rather than
+    // synchronously inside the effect body (same pattern as `useApiCollection`).
+    queueMicrotask(() => setEmail(getCurrentUser()?.email ?? ""));
   }, []);
 
   const [title, subtitle] = PAGE_TITLES[pathname] ?? ["", ""];

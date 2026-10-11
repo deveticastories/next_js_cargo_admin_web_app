@@ -100,9 +100,9 @@ export function SearchableSelect({
             {filtered.length === 0 ? (
               <div className="cc-searchselect-empty">No {label.toLowerCase()} matches &ldquo;{query}&rdquo;</div>
             ) : (
-              filtered.map((option) => (
+              filtered.map((option, i) => (
                 <div
-                  key={option}
+                  key={`${option}-${i}`}
                   className={`cc-searchselect-option ${option === value ? "active" : ""}`}
                   onClick={() => select(option)}
                 >

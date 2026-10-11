@@ -13,13 +13,16 @@ import { Modal } from "@/components/ui/Modal";
 import { Field } from "@/components/ui/Field";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { SkeletonTable } from "@/components/ui/Skeleton";
-import { ApiError, api } from "@/utils/apiClient";
+import { ApiError } from "@/utils/apiClient";
+import { getAllPackages, packageBookingId } from "@/services/PackageServices";
 import { fmtDate, todayISO, toDateInputValue } from "@/utils/format";
 import type { Booking } from "@/types";
 
+const PICKUP_VIA_OPTIONS = ["Our Pickup Boy", "Direct to Store"] as const;
+
 /** Create and track shipment bookings — the entry point of the whole cargo workflow. */
 export function BookingScreen() {
-  const { bookings, senders, receivers, pickupPartners } = useCargoData();
+  const { bookings, senders, receivers, pickupAssigns } = useCargoData();
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [modalRow, setModalRow] = useState<string | "new" | null>(null);
@@ -33,15 +36,14 @@ export function BookingScreen() {
 
   useEffect(() => {
     let cancelled = false;
-    api
-      .get<{ booking: string; bundleNumber: number; readySaved?: boolean; repackedBy?: string }[]>("/packing-lists")
-      .then((lists) => {
+    getAllPackages()
+      .then((packages) => {
         if (cancelled) return;
         const map = new Map<string, Set<number>>();
-        for (const l of lists) {
-          if (!l.readySaved && !l.repackedBy) continue;
-          if (!map.has(l.booking)) map.set(l.booking, new Set());
-          map.get(l.booking)!.add(l.bundleNumber);
+        for (const pkg of packages) {
+          const bookingId = packageBookingId(pkg);
+          if (!map.has(bookingId)) map.set(bookingId, new Set());
+          for (const bundle of pkg.bundles) map.get(bookingId)!.add(bundle.bundleNo);
         }
         setListedByBooking(map);
       })
@@ -66,11 +68,13 @@ export function BookingScreen() {
     router.push(`/admin/customers?${params.toString()}`);
   };
 
-  const pickupOptions = [
-    "Our Pickup Boy",
-    "Direct to Store",
-    ...pickupPartners.items.filter((p) => p.status === "Active").map((p) => p.name),
-  ];
+  // "Pick up via" is either our own pickup boy or the sender dropping off at the store.
+  // For "Our Pickup Boy" the booking still has to point at a real Pickup Assign record
+  // (cargo-backend's `pickupOption` is a required PickupAssign ref), chosen by its LR No.
+  const pickupOptionLabels: Record<string, string> = {};
+  for (const p of pickupAssigns.items) pickupOptionLabels[p.lrNo] = `${p.lrNo} — ${p.transport}`;
+  const pickupOptions = pickupAssigns.items.map((p) => p.lrNo);
+  const addPickupAssignFromSearch = () => router.push("/admin/pickup-assign");
   const filtered = bookings.items.filter((b) =>
     Object.values(b).some((v) => String(v).toLowerCase().includes(query.toLowerCase()))
   );
@@ -93,19 +97,30 @@ export function BookingScreen() {
       productType: "Normal",
       repackingStatus: "Repacking Required",
       status: "Active",
+      pickupVia: PICKUP_VIA_OPTIONS[0],
     });
     setModalRow("new");
     setError("");
   };
   const openEdit = (row: Booking) => {
-    setForm({ ...row, date: toDateInputValue(row.date) });
+    // Every saved booking has a pickup assign (the backend requires one), so it came via our pickup boy.
+    setForm({ ...row, date: toDateInputValue(row.date), pickupVia: PICKUP_VIA_OPTIONS[0] });
     setModalRow(row.id);
     setError("");
   };
 
   const save = async () => {
-    if (!form.sender || !form.receiver || !form.pickupOption || !form.bundleCount) {
-      setError("Sender, receiver, pickup option and bundle count are required.");
+    if (!form.sender || !form.receiver || !form.pickupVia || !form.bundleCount) {
+      setError("Sender, receiver, pick up via and bundle count are required.");
+      return;
+    }
+    if (form.pickupVia === "Direct to Store") {
+      // cargo-backend has no way to store this yet — `pickupOption` must reference a Pickup Assign.
+      setError("Direct to Store bookings can't be saved yet — the backend still requires a pickup assign.");
+      return;
+    }
+    if (!form.pickupOption) {
+      setError("Select the pickup assign (LR No) for this booking.");
       return;
     }
     // Each extra charge only applies under its own condition — zero it out
@@ -230,7 +245,25 @@ export function BookingScreen() {
               onCreateNew={(q) => addCustomerFromSearch("receiver", q)}
             />
           </div>
-          <Field field={{ key: "pickupOption", label: "Pick up via", type: "select", options: pickupOptions }} value={form.pickupOption} onChange={set} />
+          <Field
+            field={{ key: "pickupVia", label: "Pick up via", type: "select", options: [...PICKUP_VIA_OPTIONS] }}
+            value={form.pickupVia}
+            onChange={(k, v) =>
+              setForm({ ...form, [k]: v, ...(v !== "Our Pickup Boy" && { pickupOption: "" }) })
+            }
+          />
+          {form.pickupVia === "Our Pickup Boy" && (
+            <SearchableSelect
+              label="Pickup assign"
+              value={(form.pickupOption as string) ?? ""}
+              options={pickupOptions}
+              optionLabels={pickupOptionLabels}
+              placeholder="Search LR No / transport partner"
+              createLabel="Add new pickup assign"
+              onChange={(v) => set("pickupOption", v)}
+              onCreateNew={addPickupAssignFromSearch}
+            />
+          )}
           <div className="cc-grid-2">
             <Field field={{ key: "date", label: "Booking date", type: "date" }} value={form.date} onChange={set} />
             <Field field={{ key: "billOption", label: "Bill option", type: "select", options: ["With Bill", "Without Bill"] }} value={form.billOption} onChange={set} />

@@ -1,10 +1,10 @@
 "use client";
 
 /**
- * Load bookings sent here from Ready to stuff ("Go to stuffing") into a container. Submitting calls
- * `POST /api/stuffings`, which atomically records the stuffing, marks the
- * chosen bookings as stuffed, and copies them into the UAE store's
- * incoming log — then this screen just refetches those two collections.
+ * Load bookings sent here from Ready to stuff ("Go to stuffing") into a container. cargo-backend's
+ * `POST /stuffings` only records the stuffing itself — unlike the old local-only shim, it has no
+ * route to atomically mark bookings stuffed or copy them into the UAE store's incoming log, so
+ * `submit` below does those two steps itself right after creating it.
  */
 
 import { useEffect, useState } from "react";
@@ -15,11 +15,13 @@ import { Button } from "@/components/ui/Button";
 import { DataTable } from "@/components/ui/DataTable";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { SearchBar } from "@/components/ui/SearchBar";
-import { api, ApiError } from "@/utils/apiClient";
+import { ApiError } from "@/utils/apiClient";
+import { computeBundleMarkIds, flattenPackage, getAllPackages, packageBookingId, type PackageDoc } from "@/services/PackageServices";
+import { updateStuffStatus } from "@/services/BookingServices";
 import { downloadText, fmtDate, money } from "@/utils/format";
 import { downloadContainerManifestPdf, downloadTablePdf, pdfMoney, type PartyDetails } from "@/utils/pdf";
 import { colors } from "@/utils/colors";
-import type { Booking, PackingList, UaeStoreLogEntry } from "@/types";
+import type { Booking, UaeStoreLogEntry } from "@/types";
 
 interface StuffingSummary {
   code: string;
@@ -28,7 +30,7 @@ interface StuffingSummary {
 }
 
 export function StuffingScreen() {
-  const { bookings, containers, stuffings, uaeStoreLog, senders, receivers, invoices, receiptEntries, pricing } = useCargoData();
+  const { bookings, containers, stuffings, uaeStoreLog, senders, receivers, invoices, receiptEntries, pricing, products, fabrics } = useCargoData();
   const [containerId, setContainerId] = useState("");
   const [bookingQuery, setBookingQuery] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
@@ -40,32 +42,34 @@ export function StuffingScreen() {
   const [openContainerId, setOpenContainerId] = useState<string | null>(null);
   // Within the open container: the booking whose Booking ID was clicked, expanded into its charges breakdown.
   const [openBookingId, setOpenBookingId] = useState<string | null>(null);
-  // Saved packing lists per booking id, in bundle order — for the "Bundle mark" columns and the bundle breakdown.
-  const [listsByBooking, setListsByBooking] = useState<Map<string, PackingList[]>>(new Map());
+  // Every booking's Package, fetched once — feeds the "Bundle mark" columns and the bundle breakdown.
+  const [packages, setPackages] = useState<PackageDoc[]>([]);
   // Within the open booking: whether its "Number of bundles" has been clicked open into the bundle breakdown.
   const [bundlesOpen, setBundlesOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    api
-      .get<PackingList[]>("/packing-lists")
-      .then((lists) => {
-        if (cancelled) return;
-        const map = new Map<string, PackingList[]>();
-        // Lists come back sorted by bundle number, so each booking's bundles stay in order.
-        for (const l of lists) {
-          if (!map.has(l.booking)) map.set(l.booking, []);
-          map.get(l.booking)!.push(l);
-        }
-        setListsByBooking(map);
+    getAllPackages()
+      .then((result) => {
+        if (!cancelled) setPackages(result);
       })
       .catch(() => {
-        if (!cancelled) setListsByBooking(new Map());
+        if (!cancelled) setPackages([]);
       });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  // Derived once per render from `packages` — a bundle's global mark id (see `computeBundleMarkIds`)
+  // and which booking each Package belongs to.
+  const bundleMarkIds = computeBundleMarkIds(packages);
+  const packageByBooking = new Map(packages.map((p) => [packageBookingId(p), p]));
+  const bundleMarksFor = (bookingId: string): string =>
+    (packageByBooking.get(bookingId)?.bundles ?? [])
+      .map((b) => (b._id ? bundleMarkIds.get(b._id) : undefined))
+      .filter(Boolean)
+      .join(", ");
 
   const eligible = bookings.items.filter((b) => b.sentToStuffing && !b.stuffed);
   // Already-stuffed containers aren't offered again — same rule as the Containers table's "Stuffed" badge.
@@ -130,10 +134,7 @@ export function StuffingScreen() {
             sender: senderDetails(booking?.sender ?? ""),
             receiver: receiverDetails(booking?.receiver ?? entry.receiver),
             bundles: booking ? booking.actualBundle || booking.bundleCount : entry.bundles,
-            bundleMarks: (listsByBooking.get(entry.booking) ?? [])
-              .map((l) => l.bundleMarkId)
-              .filter(Boolean)
-              .join(", "),
+            bundleMarks: bundleMarksFor(entry.booking),
             receivableAmount: invoice ? Number(invoice.amount || 0) : undefined,
             deliveryPartnerAmount: invoice ? Number(invoice.deliveryCharge || 0) : undefined,
             paymentStatus,
@@ -186,28 +187,23 @@ export function StuffingScreen() {
    * (blank lines skipped). "Minimum bundles" flags bookings under the 5-bundle minimum, the same
    * threshold that brings in the bundle handling charge.
    */
-  const bundleItemRows = openBooking
-    ? (listsByBooking.get(openBooking.id) ?? [])
-        .flatMap((list) =>
-          list.items
-            .filter((item) => item.product || item.qty || item.fabric || item.description)
-            .map((item, index) => ({ list, item, index }))
-        )
-        .map(({ list, item, index }, i) => {
-          const bundleCount = openBookingRow?.bundles ?? 0;
-          return {
-            id: `${list.id}-${index}`,
-            slNo: i + 1,
-            bookingCode: openBooking.code,
-            bundle: `Bundle ${list.bundleNumber}${list.bundleMarkId ? ` (mark ${list.bundleMarkId})` : ""}`,
-            product: item.product || "—",
-            qty: item.qty || "—",
-            fabric: item.fabric || "—",
-            minimumBundles: bundleCount < 5 ? "Below 5" : "5 or more",
-            productType: openBooking.productType || "—",
-            billOption: openBooking.billOption || "—",
-          };
-        })
+  const openPackage = openBooking ? packageByBooking.get(openBooking.id) : undefined;
+  const bundleItemRows = openBooking && openPackage
+    ? flattenPackage(openPackage, { products: products.items, fabrics: fabrics.items }, bundleMarkIds).map((row, i) => {
+        const bundleCount = openBookingRow?.bundles ?? 0;
+        return {
+          id: `${openPackage._id}-${i}`,
+          slNo: i + 1,
+          bookingCode: openBooking.code,
+          bundle: `Bundle ${row.bundleNumber}${row.bundleMarkId ? ` (mark ${row.bundleMarkId})` : ""}`,
+          product: row.product || "—",
+          qty: row.qty || "—",
+          fabric: row.fabric || "—",
+          minimumBundles: bundleCount < 5 ? "Below 5" : "5 or more",
+          productType: openBooking.productType || "—",
+          billOption: openBooking.billOption || "—",
+        };
+      })
     : [];
 
   const pdfMoneyOrDash = (n?: number) => (n === undefined ? "-" : pdfMoney(n));
@@ -307,7 +303,8 @@ export function StuffingScreen() {
     setSendingBackId(id);
     setError("");
     try {
-      await bookings.update(id, { sentToStuffing: false });
+      await updateStuffStatus(id, "Pending");
+      await bookings.refetch();
       setSelected((prev) => prev.filter((x) => x !== id));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to send the booking back.");
@@ -325,7 +322,21 @@ export function StuffingScreen() {
     setError("");
     try {
       const stuffedBookings = bookings.items.filter((b) => selected.includes(b.id));
-      const created = await api.post<{ code: string }>("/stuffings", { containerId, bookingIds: selected });
+      // cargo-backend's `POST /stuffings` only creates the record — no atomic "mark stuffed +
+      // copy to UAE log" route like the old local shim had, so both happen here instead.
+      const created = await stuffings.create({ container: containerId, bookings: selected });
+      await Promise.all(
+        stuffedBookings.map(async (b) => {
+          await updateStuffStatus(b.id, "Stuffed");
+          await uaeStoreLog.create({
+            booking: b.id,
+            receiver: b.receiver,
+            bundles: b.actualBundle || b.bundleCount,
+            stuffing: created.id,
+            date: created.date,
+          });
+        })
+      );
       const container = containers.items.find((c) => c.id === containerId);
       setLastSummary({ code: created.code, containerCode: container?.code ?? "", bookings: stuffedBookings });
       await Promise.all([bookings.refetch(), uaeStoreLog.refetch(), containers.refetch(), stuffings.refetch()]);
