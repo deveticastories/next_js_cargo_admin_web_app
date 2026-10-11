@@ -5,7 +5,15 @@
  * base URL already includes). Mirrors the routers in `cargo-backend/app.ts`.
  */
 
-export const API_BASE_URL = "http://3.107.18.59/api";
+/**
+ * The real cargo-backend server. It only speaks plain HTTP, so an HTTPS page
+ * (e.g. the Vercel deployment) can't call it directly — the browser blocks it
+ * as mixed content. `next.config.ts` proxies `/api/*` here server-side instead.
+ */
+export const BACKEND_API_URL = "http://3.107.18.59/api";
+
+/** What the browser calls: same-origin `/api`, rewritten to `BACKEND_API_URL` by Next.js. */
+export const API_BASE_URL = "/api";
 
 /** Standard CRUD + status-toggle paths every cargo-backend master module exposes. */
 function crudEndpoints<P extends string>(base: P) {
