@@ -15,7 +15,7 @@ import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { ApiError } from "@/utils/apiClient";
 import { getAllPackages, packageBookingId } from "@/services/PackageServices";
-import { fmtDate, todayISO, toDateInputValue } from "@/utils/format";
+import { fmtDate, money, todayISO, toDateInputValue } from "@/utils/format";
 import type { Booking, PickupAssign } from "@/types";
 
 const PICKUP_VIA_OPTIONS = ["Our Pickup Boy", "Direct to Store"] as const;
@@ -200,7 +200,7 @@ export function BookingScreen() {
           </div>
         </div>
         {bookings.loading ? (
-          <SkeletonTable columns={12} />
+          <SkeletonTable columns={13} />
         ) : (
           <DataTable
             columns={[
@@ -211,7 +211,9 @@ export function BookingScreen() {
               { key: "bundleCount", label: "Actual bundle" },
               // Set by the Repacking screen's "Confirm" action, not the booking form — 0/"—" until repacking's been confirmed once.
               { key: "actualBundle", label: "Bundle", render: (r) => (r.actualBundle ? r.actualBundle : "—") },
-              { key: "bundleType", label: "Bundle type" },
+              { key: "bundleType", label: "Bundle type", render: (r) => r.bundleType || "—" },
+              // Only charged when the booking has fewer than 5 bundles — "—" otherwise.
+              { key: "bundleHandlingCharge", label: "Bundle handling charge (below 5 bundles)", render: (r) => (r.bundleHandlingCharge ? money(r.bundleHandlingCharge) : "—") },
               { key: "productType", label: "Product type" },
               { key: "billOption", label: "Bill", render: (r) => <Badge value={r.billOption} /> },
               // A booking whose package list is Added reads as Package Ready, even if it was saved as Repacking Required.
