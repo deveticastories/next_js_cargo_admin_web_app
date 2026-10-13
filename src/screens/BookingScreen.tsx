@@ -222,6 +222,7 @@ export function BookingScreen() {
               { key: "status", label: "Status", render: (r) => <Badge value={r.stuffed ? "Stuffed" : "Pending"} /> },
             ]}
             rows={filtered}
+            pageSize={15}
             onEdit={openEdit}
             onDelete={removeBooking}
             // Once a booking has been marked Ready to Ship or repacked, it's part of the downstream workflow.
