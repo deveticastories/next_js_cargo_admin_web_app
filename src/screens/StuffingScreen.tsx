@@ -115,9 +115,9 @@ export function StuffingScreen() {
         .map((entry, i) => {
           const booking = bookings.items.find((b) => b.id === entry.booking);
           const code = booking?.code ?? "—";
-          const invoice = booking ? invoices.items.find((inv) => inv.bookingCode === booking.code) : undefined;
+          const invoice = booking ? invoices.items.find((inv) => inv.bookingId === booking.id) : undefined;
           const received = invoice
-            ? receiptEntries.items.filter((r) => r.invoiceNo === invoice.code).reduce((sum, r) => sum + Number(r.receivedAmount || 0), 0)
+            ? receiptEntries.items.filter((r) => r.invoiceId === invoice.id).reduce((sum, r) => sum + Number(r.receivedAmount || 0), 0)
             : 0;
           const paymentStatus = !invoice
             ? "Not invoiced"

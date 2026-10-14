@@ -1,16 +1,14 @@
 /**
- * cargo-backend has no API for Credit notes, Daily expenses, Invoicing,
- * Receipt entry or the UAE store log — Booking, Package (packing lists) and
- * Stuffing are now live (see `BookingServices.ts`, `PackageServices.ts`,
- * `StuffingServices.ts`); these remaining ones stay fully working but
- * entirely local: an in-memory, this-browser-tab-only store (no network,
+ * cargo-backend has no API for the UAE store log — everything else is now
+ * live (see the other `*Services.ts` files in this folder); this one stays
+ * fully working but entirely local: an in-memory, this-browser-tab-only store (no network,
  * nothing persisted across a reload) standing in until a real backend
  * module exists for them.
  *
  * Each service below is a module-level singleton — created once, not per
  * render — so data survives navigating between screens in the same session.
  */
-import type { CreditNoteEntry, DailyExpense, Invoice, ReceiptEntry, UaeStoreLogEntry } from "@/types";
+import type { UaeStoreLogEntry } from "@/types";
 import type { EntityService } from "./entityHelpers";
 
 let uid = 0;
@@ -54,7 +52,3 @@ export function createLocalCollectionService<T extends { id: string }>(codePrefi
 }
 
 export const UaeStoreLogLocalServices = createLocalCollectionService<UaeStoreLogEntry>("LOG");
-export const DailyExpenseLocalServices = createLocalCollectionService<DailyExpense>("EXP");
-export const InvoiceLocalServices = createLocalCollectionService<Invoice>("INV");
-export const ReceiptEntryLocalServices = createLocalCollectionService<ReceiptEntry>("RCP");
-export const CreditNoteLocalServices = createLocalCollectionService<CreditNoteEntry>("CRN");

@@ -197,38 +197,58 @@ export interface DailyExpense {
   description?: string;
 }
 
-/** An invoice generated on the Invoicing screen (one per booking). Mirrors `Invoice` in the backend. */
+/**
+ * An invoice generated on the Invoicing screen (one per booking). Mirrors
+ * `Invoice` in cargo-backend — every amount is computed server-side from the
+ * booking (India → UAE price for its UOM × repacked bundles, plus its pickup
+ * and brand handling charges, minus the receiver's discount).
+ */
 export interface Invoice {
   id: string;
   /** Invoice number, e.g. "INV-0001". */
   code: string;
+  bookingId: string;
   bookingCode: string;
-  sender?: string;
-  receiver?: string;
+  containerId: string;
   /** Code of the (stuffed) container picked when the invoice was generated. */
   container?: string;
-  amount: number;
+  deliveryPartnerId: string;
   deliveryPartner?: string;
+  /** The delivery partner's charge — owed to the partner, not part of `amount`. */
   deliveryCharge?: number;
-  deliveryPaymentStatus?: "Paid" | "Pending";
+  subtotal: number;
+  /** Booking's pickup + brand handling charges. */
+  additionalCharges: number;
+  receivableDiscount: number;
+  /** Invoice total. */
+  amount: number;
   createdAt?: string;
 }
 
-/** Money received against an invoice (invoice no. = the booking code). Mirrors `ReceiptEntry` in the backend. */
+export type DeliveryPartnerStatus = "Pending" | "Paid";
+
+/** Money received against an invoice. Mirrors `ReceiptEntry` in the backend. */
 export interface ReceiptEntry {
   id: string;
   code: string;
   date: string;
+  invoiceId: string;
   invoiceNo: string;
-  /** Full invoice total at the time of receipt. */
-  invoiceAmount: number;
+  /** What was still outstanding on the invoice when this receipt was entered. */
+  receivableAmount: number;
   receivedAmount: number;
+  /** `receivableAmount - receivedAmount`, computed server-side. */
+  balanceAmount: number;
+  receivedDate: string;
+  deliveryPartnerAmount: number;
+  deliveryPartnerStatus: DeliveryPartnerStatus;
 }
 
 /** One petty-cash fund entry. Balance carries forward automatically. */
 export interface CreditNoteEntry {
   id: string;
   code: string;
+  /** When the entry was added (the backend's `createdAt`). */
   date: string;
   amount: number;
   description?: string;

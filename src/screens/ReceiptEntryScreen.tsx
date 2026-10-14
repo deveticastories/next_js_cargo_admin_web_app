@@ -10,12 +10,17 @@ import { Modal } from "@/components/ui/Modal";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { ApiError } from "@/utils/apiClient";
+import { updateDeliveryPartnerStatus } from "@/services/ReceiptEntryServices";
 import { fmtDate, money, todayISO, toDateInputValue } from "@/utils/format";
-import type { ReceiptEntry } from "@/types";
+import type { DeliveryPartnerStatus, ReceiptEntry } from "@/types";
 
-/** Payments received against invoices generated on the Invoicing screen. */
+/**
+ * Payments received against invoices generated on the Invoicing screen. An invoice can be paid
+ * over several receipts — each one records what was still receivable at the time, and
+ * cargo-backend stores the resulting balance. The delivery partner's share rides on the receipt.
+ */
 export function ReceiptEntryScreen() {
-  const { receiptEntries, invoices, deliveryPartners } = useCargoData();
+  const { receiptEntries, invoices } = useCargoData();
   const [query, setQuery] = useState("");
   const [modalRow, setModalRow] = useState<string | "new" | null>(null);
   const [form, setForm] = useState<Record<string, unknown>>({});
@@ -24,26 +29,20 @@ export function ReceiptEntryScreen() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [statusBusyId, setStatusBusyId] = useState<string | null>(null);
 
-  const receivedSoFar = (invoiceNo: string, exceptId?: string) =>
-    receiptEntries.items
-      .filter((r) => r.invoiceNo === invoiceNo && r.id !== exceptId)
-      .reduce((sum, r) => sum + Number(r.receivedAmount || 0), 0);
+  const receiptsFor = (invoiceId: string, exceptId?: string) =>
+    receiptEntries.items.filter((r) => r.invoiceId === invoiceId && r.id !== exceptId);
+  const receivedSoFar = (invoiceId: string, exceptId?: string) =>
+    receiptsFor(invoiceId, exceptId).reduce((sum, r) => sum + Number(r.receivedAmount || 0), 0);
+  const outstanding = (invoiceId: string, exceptId?: string) => {
+    const invoice = invoices.items.find((i) => i.id === invoiceId);
+    return Math.max(0, Number(invoice?.amount ?? 0) - receivedSoFar(invoiceId, exceptId));
+  };
 
-  // Balance per receipt = invoice amount less everything received on that invoice up to and including this receipt.
-  const balanceById = new Map<string, number>();
-  const running = new Map<string, number>();
-  [...receiptEntries.items]
-    .sort((a, b) => String(a.date).localeCompare(String(b.date)) || a.code.localeCompare(b.code))
-    .forEach((r) => {
-      const total = (running.get(r.invoiceNo) ?? 0) + Number(r.receivedAmount || 0);
-      running.set(r.invoiceNo, total);
-      balanceById.set(r.id, Number(r.invoiceAmount || 0) - total);
-    });
-
-  const changeDeliveryStatus = async (invoiceId: string, status: string) => {
-    setStatusBusyId(invoiceId);
+  const changeDeliveryStatus = async (row: ReceiptEntry, status: DeliveryPartnerStatus) => {
+    setStatusBusyId(row.id);
     try {
-      await invoices.update(invoiceId, { deliveryPaymentStatus: status });
+      await updateDeliveryPartnerStatus(row.id, status);
+      await receiptEntries.refetch();
     } catch (err) {
       alert(err instanceof ApiError ? err.message : "Failed to update the delivery partner status.");
     } finally {
@@ -52,36 +51,45 @@ export function ReceiptEntryScreen() {
   };
 
   // Once the delivery partner amount is settled, the receipt is locked (no edit / delete).
-  const isDeliveryPaid = (r: ReceiptEntry) =>
-    invoices.items.find((i) => i.code === r.invoiceNo)?.deliveryPaymentStatus === "Paid";
+  const isDeliveryPaid = (r: ReceiptEntry) => r.deliveryPartnerStatus === "Paid";
 
   const filtered = receiptEntries.items.filter((r) =>
     Object.values(r).some((v) => String(v).toLowerCase().includes(query.toLowerCase()))
   );
 
-  // An invoice that already has a submitted receipt isn't offered again (the one being edited stays).
-  const receiptedInvoices = new Set(receiptEntries.items.map((r) => r.invoiceNo));
-  const invoiceChoices = invoices.items.filter((i) => !receiptedInvoices.has(i.code) || i.code === form.invoiceNo);
-
-  const selectedInvoice = (form.invoiceNo as string) ?? "";
   const editingId = modalRow && modalRow !== "new" ? modalRow : undefined;
-  const invoiceTotal = Number(invoices.items.find((i) => i.code === selectedInvoice)?.amount ?? 0);
-  const receivable = Math.max(0, invoiceTotal - receivedSoFar(selectedInvoice, editingId));
+  const selectedInvoiceId = (form.invoiceId as string) ?? "";
+  const selectedInvoice = invoices.items.find((i) => i.id === selectedInvoiceId);
+  // Only invoices with something left to collect are offered (the one being edited always stays).
+  const invoiceChoices = invoices.items.filter((i) => i.id === selectedInvoiceId || outstanding(i.id) > 0);
+  const receivable = selectedInvoiceId ? outstanding(selectedInvoiceId, editingId) : 0;
 
   const openNew = () => {
-    setForm({ date: todayISO() });
+    setForm({ receivedDate: todayISO() });
     setModalRow("new");
     setError("");
   };
   const openEdit = (row: ReceiptEntry) => {
-    setForm({ ...row, date: toDateInputValue(row.date) });
+    setForm({
+      invoiceId: row.invoiceId,
+      receivedDate: toDateInputValue(row.receivedDate),
+      receivedAmount: String(row.receivedAmount),
+      deliveryPartnerAmount: String(row.deliveryPartnerAmount),
+    });
     setModalRow(row.id);
     setError("");
   };
 
+  const pickInvoice = (code: string) => {
+    const invoice = invoices.items.find((i) => i.code === code);
+    // The delivery partner's charge is owed once per invoice — prefill it only on the invoice's first receipt.
+    const dpAmount = invoice && receiptsFor(invoice.id).length === 0 ? Number(invoice.deliveryCharge ?? 0) : 0;
+    setForm({ ...form, invoiceId: invoice?.id ?? "", receivedAmount: "", deliveryPartnerAmount: String(dpAmount) });
+  };
+
   const save = async () => {
-    if (!form.date || !selectedInvoice) {
-      setError("Date and invoice number are required.");
+    if (!form.receivedDate || !selectedInvoice) {
+      setError("Received date and invoice number are required.");
       return;
     }
     const received = Number(form.receivedAmount);
@@ -89,7 +97,20 @@ export function ReceiptEntryScreen() {
       setError("Enter the received amount.");
       return;
     }
-    const payload = { date: form.date, invoiceNo: selectedInvoice, invoiceAmount: invoiceTotal, receivedAmount: received };
+    const dpAmount = Number(form.deliveryPartnerAmount || 0);
+    if (!(dpAmount >= 0)) {
+      setError("Delivery partner amount can't be negative.");
+      return;
+    }
+    const payload = {
+      invoiceId: selectedInvoice.id,
+      invoiceNo: selectedInvoice.code,
+      receivableAmount: receivable,
+      receivedAmount: received,
+      receivedDate: form.receivedDate,
+      deliveryPartnerAmount: dpAmount,
+      ...(modalRow === "new" && { date: todayISO() }),
+    };
     setSaving(true);
     try {
       if (modalRow === "new") await receiptEntries.create(payload);
@@ -103,7 +124,7 @@ export function ReceiptEntryScreen() {
   };
 
   const removeReceipt = async (row: ReceiptEntry) => {
-    if (!window.confirm(`Delete receipt ${row.code}?`)) return;
+    if (!window.confirm(`Delete the ${money(row.receivedAmount)} receipt for ${row.invoiceNo}?`)) return;
     setDeletingId(row.id);
     try {
       await receiptEntries.remove(row.id);
@@ -140,50 +161,43 @@ export function ReceiptEntryScreen() {
                 key: "invoiceDate",
                 label: "Date",
                 render: (r) => {
-                  const inv = invoices.items.find((i) => i.code === r.invoiceNo);
-                  return inv?.createdAt ? fmtDate(inv.createdAt) : "—";
+                  const inv = invoices.items.find((i) => i.id === r.invoiceId);
+                  return inv?.createdAt ? fmtDate(inv.createdAt) : fmtDate(r.date);
                 },
               },
               { key: "invoiceNo", label: "Invoice number" },
-              { key: "invoiceAmount", label: "Receivable amount", render: (r) => money(r.invoiceAmount) },
+              { key: "receivableAmount", label: "Receivable amount", render: (r) => money(r.receivableAmount) },
               { key: "receivedAmount", label: "Received amount", render: (r) => money(r.receivedAmount) },
               {
-                key: "balance",
+                key: "balanceAmount",
                 label: "Balance amount",
-                render: (r) => {
-                  const balance = balanceById.get(r.id) ?? 0;
-                  return <span style={balance < 0 ? { color: "var(--danger)", fontWeight: 600 } : undefined}>{money(balance)}</span>;
-                },
+                render: (r) => (
+                  <span style={r.balanceAmount < 0 ? { color: "var(--danger)", fontWeight: 600 } : undefined}>{money(r.balanceAmount)}</span>
+                ),
               },
-              { key: "date", label: "Received date", render: (r) => fmtDate(r.date) },
+              { key: "receivedDate", label: "Received date", render: (r) => fmtDate(r.receivedDate) },
               {
-                key: "deliveryCharge",
+                key: "deliveryPartnerAmount",
                 label: "Delivery partner amount",
                 render: (r) => {
-                  const inv = invoices.items.find((i) => i.code === r.invoiceNo);
-                  if (!inv?.deliveryPartner) return "—";
-                  const charge = inv.deliveryCharge || Number(deliveryPartners.items.find((d) => d.name === inv.deliveryPartner)?.charge ?? 0);
-                  return <span title={inv.deliveryPartner}>{money(charge)}</span>;
+                  const partner = invoices.items.find((i) => i.id === r.invoiceId)?.deliveryPartner;
+                  return <span title={partner}>{money(r.deliveryPartnerAmount)}</span>;
                 },
               },
               {
-                key: "deliveryPaymentStatus",
+                key: "deliveryPartnerStatus",
                 label: "Delivery partner status",
-                render: (r) => {
-                  const inv = invoices.items.find((i) => i.code === r.invoiceNo);
-                  if (!inv) return "—";
-                  return (
-                    <select
-                      value={inv.deliveryPaymentStatus ?? "Pending"}
-                      disabled={statusBusyId === inv.id}
-                      onChange={(e) => changeDeliveryStatus(inv.id, e.target.value)}
-                      style={{ padding: "4px 8px", borderRadius: 6, cursor: "pointer" }}
-                    >
-                      <option value="Pending">Pending</option>
-                      <option value="Paid">Paid</option>
-                    </select>
-                  );
-                },
+                render: (r) => (
+                  <select
+                    value={r.deliveryPartnerStatus}
+                    disabled={statusBusyId === r.id}
+                    onChange={(e) => changeDeliveryStatus(r, e.target.value as DeliveryPartnerStatus)}
+                    style={{ padding: "4px 8px", borderRadius: 6, cursor: "pointer" }}
+                  >
+                    <option value="Pending">Pending</option>
+                    <option value="Paid">Paid</option>
+                  </select>
+                ),
               },
             ]}
             rows={filtered}
@@ -215,7 +229,7 @@ export function ReceiptEntryScreen() {
           submitLabel="Submit"
           submitting={saving}
         >
-          <Field field={{ key: "date", label: "Date", type: "date", required: true }} value={form.date} onChange={set} />
+          <Field field={{ key: "receivedDate", label: "Received date", type: "date", required: true }} value={form.receivedDate} onChange={set} />
           <Field
             field={{
               key: "invoiceNo",
@@ -227,8 +241,8 @@ export function ReceiptEntryScreen() {
               optionLabels: Object.fromEntries(invoiceChoices.map((i) => [i.code, `${i.code} · ${i.bookingCode}`])),
               disabled: modalRow !== "new",
             }}
-            value={form.invoiceNo}
-            onChange={(k, v) => setForm({ ...form, [k]: v, receivedAmount: "" })}
+            value={selectedInvoice?.code ?? ""}
+            onChange={(_, code) => pickInvoice(code)}
           />
           {selectedInvoice && (
             <>
@@ -240,6 +254,15 @@ export function ReceiptEntryScreen() {
               <Field
                 field={{ key: "receivedAmount", label: "Received amount", type: "number", required: true }}
                 value={form.receivedAmount}
+                onChange={set}
+              />
+              <Field
+                field={{
+                  key: "deliveryPartnerAmount",
+                  label: `Delivery partner amount${selectedInvoice.deliveryPartner ? ` (${selectedInvoice.deliveryPartner})` : ""}`,
+                  type: "number",
+                }}
+                value={form.deliveryPartnerAmount}
                 onChange={set}
               />
             </>

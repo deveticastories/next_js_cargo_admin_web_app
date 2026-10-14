@@ -51,13 +51,11 @@ import { PreBookingServices } from "@/services/PreBookingServices";
 import { ContainerServices } from "@/services/ContainerServices";
 import { BookingServices } from "@/services/BookingServices";
 import { StuffingServices } from "@/services/StuffingServices";
-import {
-  DailyExpenseLocalServices,
-  InvoiceLocalServices,
-  ReceiptEntryLocalServices,
-  CreditNoteLocalServices,
-  UaeStoreLogLocalServices,
-} from "@/services/LocalWorkflowServices";
+import { InvoiceServices } from "@/services/InvoiceServices";
+import { CreditNoteServices } from "@/services/CreditNoteServices";
+import { DailyExpenseServices } from "@/services/DailyExpenseServices";
+import { ReceiptEntryServices } from "@/services/ReceiptEntryServices";
+import { UaeStoreLogLocalServices } from "@/services/LocalWorkflowServices";
 
 export interface CargoData {
   employees: ApiCollection<Employee>;
@@ -101,13 +99,13 @@ const STORES: { [K in keyof CargoData]: CollectionStore<ItemOf<CargoData[K]>> } 
   containers: createCollectionStore(ContainerServices, { persistKey: "containers" }),
   bookings: createCollectionStore(BookingServices, { persistKey: "bookings" }),
   stuffings: createCollectionStore(StuffingServices, { persistKey: "stuffings" }),
-  // cargo-backend has no module for these yet (see
+  dailyExpenses: createCollectionStore(DailyExpenseServices, { persistKey: "dailyExpenses" }),
+  invoices: createCollectionStore(InvoiceServices, { persistKey: "invoices" }),
+  receiptEntries: createCollectionStore(ReceiptEntryServices, { persistKey: "receiptEntries" }),
+  creditNotes: createCollectionStore(CreditNoteServices, { persistKey: "creditNotes" }),
+  // cargo-backend has no module for this yet (see
   // src/services/LocalWorkflowServices.ts) — fully usable, but not
   // persisted server-side.
-  dailyExpenses: createCollectionStore(DailyExpenseLocalServices),
-  invoices: createCollectionStore(InvoiceLocalServices),
-  receiptEntries: createCollectionStore(ReceiptEntryLocalServices),
-  creditNotes: createCollectionStore(CreditNoteLocalServices),
   uaeStoreLog: createCollectionStore(UaeStoreLogLocalServices),
 };
 
