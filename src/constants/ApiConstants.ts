@@ -10,8 +10,8 @@
  * (e.g. the Vercel deployment) can't call it directly — the browser blocks it
  * as mixed content. `next.config.ts` proxies `/api/*` here server-side instead.
  */
-// export const BACKEND_API_URL = "http://3.107.18.59/api";
-export const BACKEND_API_URL = "http://localhost:4004/api";
+export const BACKEND_API_URL = "http://3.107.18.59/api";
+// export const BACKEND_API_URL = "http://localhost:4004/api";
 /** What the browser calls: same-origin `/api`, rewritten to `BACKEND_API_URL` by Next.js. */
 export const API_BASE_URL = "/api";
 
@@ -70,6 +70,7 @@ export const API_ENDPOINTS = {
   DAILY_EXPENSES: crudEndpoints("/daily-expenses"),
   RECEIPT_ENTRIES: {
     ...crudEndpoints("/receipt-entries"),
-    DELIVERY_PARTNER_STATUS: (id: string) => `/receipt-entries/${id}/delivery-partner-status`,
+    DELIVERY_PARTNER_STATUS: (id: string) =>
+      `/receipt-entries/${id}/delivery-partner-status`,
   },
 } as const;
