@@ -481,6 +481,18 @@ table.cc-table tr {
 table.cc-table tr:hover td {
   background: oklch(0.98 0.008 228);
 }
+/** Full-width detail row under an expanded `<DataTable expandedRowId>` row, holding a nested table. */
+table.cc-table tr.cc-table-expanded > td,
+table.cc-table tr.cc-table-expanded:hover > td {
+  padding: 4px 18px 18px;
+  background: var(--accent-soft);
+  white-space: normal;
+}
+.cc-table-expanded .cc-table-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
 
 .cc-badge {
   display: inline-flex;

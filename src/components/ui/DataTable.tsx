@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight, Pencil, Trash2 } from "lucide-react";
 import type { ColumnConfig, RecordWithId } from "@/types";
 import { colors } from "@/utils/colors";
@@ -18,6 +18,9 @@ export interface DataTableProps<T extends RecordWithId> {
   busyRowId?: string | null;
   /** Show this many rows per page with numbered page buttons underneath. Omit to render every row. */
   pageSize?: number;
+  /** Id of the row that's expanded — `renderExpanded` is shown in a full-width row right under it. */
+  expandedRowId?: string | null;
+  renderExpanded?: (row: T) => ReactNode;
 }
 
 /** Page numbers to show — first, last, and a window around the current page, with "…" for the gaps. */
@@ -41,6 +44,8 @@ export function DataTable<T extends RecordWithId>({
   emptyText = "No records yet.",
   busyRowId = null,
   pageSize,
+  expandedRowId = null,
+  renderExpanded,
 }: DataTableProps<T>) {
   const [page, setPage] = useState(1);
 
@@ -67,29 +72,36 @@ export function DataTable<T extends RecordWithId>({
           {visibleRows.map((row) => {
             const isBusy = busyRowId === row.id;
             return (
-              <tr key={row.id}>
-                {columns.map((c) => (
-                  <td key={c.key}>
-                    {c.render ? c.render(row) : String((row as unknown as Record<string, unknown>)[c.key] ?? "")}
-                  </td>
-                ))}
-                {showActions && (
-                  <td>
-                    <div style={{ display: "flex", gap: 4 }}>
-                      {onEdit && (!canEdit || canEdit(row)) && (
-                        <Button variant="ghost" onClick={() => onEdit(row)} disabled={isBusy} aria-label="Edit">
-                          <Pencil size={15} />
-                        </Button>
-                      )}
-                      {onDelete && (!canDelete || canDelete(row)) && (
-                        <Button variant="ghost" onClick={() => onDelete(row)} loading={isBusy} aria-label="Delete">
-                          {!isBusy && <Trash2 size={15} color={colors.danger} />}
-                        </Button>
-                      )}
-                    </div>
-                  </td>
+              <Fragment key={row.id}>
+                <tr>
+                  {columns.map((c) => (
+                    <td key={c.key}>
+                      {c.render ? c.render(row) : String((row as unknown as Record<string, unknown>)[c.key] ?? "")}
+                    </td>
+                  ))}
+                  {showActions && (
+                    <td>
+                      <div style={{ display: "flex", gap: 4 }}>
+                        {onEdit && (!canEdit || canEdit(row)) && (
+                          <Button variant="ghost" onClick={() => onEdit(row)} disabled={isBusy} aria-label="Edit">
+                            <Pencil size={15} />
+                          </Button>
+                        )}
+                        {onDelete && (!canDelete || canDelete(row)) && (
+                          <Button variant="ghost" onClick={() => onDelete(row)} loading={isBusy} aria-label="Delete">
+                            {!isBusy && <Trash2 size={15} color={colors.danger} />}
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                  )}
+                </tr>
+                {renderExpanded && expandedRowId === row.id && (
+                  <tr className="cc-table-expanded">
+                    <td colSpan={columns.length + (showActions ? 1 : 0)}>{renderExpanded(row)}</td>
+                  </tr>
                 )}
-              </tr>
+              </Fragment>
             );
           })}
         </tbody>
