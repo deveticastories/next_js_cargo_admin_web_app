@@ -15,6 +15,22 @@ function toFrontend(doc: BackendDoc): PricingRoute {
   };
 }
 
+/** Spellings of the invoice route's two ends — cargo-backend's invoice lookup accepts the same ones, in any casing. */
+const CANONICAL_PLACES: Record<string, string> = {
+  india: "India",
+  uae: "UAE",
+  "u.a.e": "UAE",
+  "u.a.e.": "UAE",
+  "united arab emirates": "UAE",
+  dubai: "UAE",
+};
+
+/** Maps a route end to "India" / "UAE" when it's a known spelling of either; otherwise returns it trimmed. */
+export function canonicalPlace(value: unknown): string {
+  const text = String(value ?? "").trim().replace(/\s+/g, " ");
+  return CANONICAL_PLACES[text.toLowerCase()] ?? text;
+}
+
 function toBackend(body: Record<string, unknown>) {
   return {
     from: body.from,

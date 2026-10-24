@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus } from "lucide-react";
+import { Download, Plus } from "lucide-react";
 import { useCargoData } from "@/components/providers/CargoDataProvider";
 import { StatCard } from "@/components/ui/StatCard";
 import { SearchBar } from "@/components/ui/SearchBar";
@@ -16,6 +16,7 @@ import { SkeletonTable } from "@/components/ui/Skeleton";
 import { ApiError } from "@/utils/apiClient";
 import { getAllPackages, packageBookingId } from "@/services/PackageServices";
 import { fmtDate, money, todayISO, toDateInputValue } from "@/utils/format";
+import { downloadTablePdf, pdfMoney } from "@/utils/pdf";
 import type { Booking, PickupAssign } from "@/types";
 
 const PICKUP_VIA_OPTIONS = ["Our Pickup Boy", "Direct to Store"] as const;
@@ -33,6 +34,9 @@ export function BookingScreen() {
   // Bundle numbers whose packing list was saved (Package ready or Repacking), per booking id.
   const [listedByBooking, setListedByBooking] = useState<Map<string, Set<number>>>(new Map());
   const [loadingLists, setLoadingLists] = useState(true);
+  // Bookings ticked for the PDF download.
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,6 +86,53 @@ export function BookingScreen() {
   const filtered = bookings.items.filter((b) =>
     Object.values(b).some((v) => String(v).toLowerCase().includes(query.toLowerCase()))
   );
+  // Header checkbox selects/clears every booking currently shown (respecting the search).
+  const allSelected = filtered.length > 0 && filtered.every((b) => selectedIds.includes(b.id));
+  const toggleAll = () =>
+    setSelectedIds(allSelected ? selectedIds.filter((id) => !filtered.some((b) => b.id === id)) : [...new Set([...selectedIds, ...filtered.map((b) => b.id)])]);
+  const toggle = (id: string) => setSelectedIds(selectedIds.includes(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id]);
+  // Ticked bookings — the PDF covers only these. Deleted ones simply drop out.
+  const selectedBookings = bookings.items.filter((b) => selectedIds.includes(b.id));
+
+  const packStatusLabel = (b: Booking) =>
+    b.repackingStatus === "Ready to Ship" || (!loadingLists && packageListAdded(b)) ? "Package Ready" : b.repackingStatus === "Repacking Required" ? "Repacking" : b.repackingStatus || "-";
+
+  const downloadPdf = async () => {
+    if (!selectedBookings.length) return;
+    setDownloading(true);
+    try {
+      const sum = (pick: (b: Booking) => number) => selectedBookings.reduce((total, b) => total + (Number(pick(b)) || 0), 0);
+      await downloadTablePdf(`bookings-${todayISO()}.pdf`, {
+        title: "BOOKING LIST",
+        info: [
+          ["Generated On", fmtDate(todayISO())],
+          ["No. of Bookings", String(selectedBookings.length)],
+        ],
+        head: ["Sl No", "Booking ID", "Date", "Sender", "Receiver", "Bill", "Bundle Count", "Bundle", "Bundle Type", "Product Type", "Bundle Handling", "Pack Status", "Status"],
+        body: selectedBookings.map((b, i) => [
+          String(i + 1),
+          b.code,
+          fmtDate(b.date),
+          b.sender,
+          b.receiver,
+          b.billOption || "-",
+          String(b.bundleCount || 0),
+          b.actualBundle ? String(b.actualBundle) : "-",
+          b.bundleType || "-",
+          b.productType || "-",
+          b.bundleHandlingCharge ? pdfMoney(b.bundleHandlingCharge) : "-",
+          packStatusLabel(b),
+          b.stuffed ? "Stuffed" : "Pending",
+        ]),
+        foot: ["", "Total", "", "", "", "", String(sum((b) => b.bundleCount)), String(sum((b) => b.actualBundle)), "", "", pdfMoney(sum((b) => b.bundleHandlingCharge)), "", ""],
+      });
+    } catch {
+      alert("Failed to generate the PDF.");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   const readyBundles = bookings.items
     .filter((b) => b.repackingStatus === "Ready to Ship")
     .reduce((sum, b) => sum + Number(b.bundleCount || 0), 0);
@@ -194,16 +245,29 @@ export function BookingScreen() {
           </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <SearchBar value={query} onChange={setQuery} placeholder="Search bookings" />
+            <Button
+              onClick={downloadPdf}
+              loading={downloading}
+              disabled={!selectedBookings.length}
+              title={selectedBookings.length ? undefined : "Select at least one booking first"}
+            >
+              {!downloading && <Download size={15} />} Download PDF{selectedBookings.length ? ` (${selectedBookings.length})` : ""}
+            </Button>
             <Button variant="primary" onClick={openNew}>
               <Plus size={15} /> New booking
             </Button>
           </div>
         </div>
         {bookings.loading ? (
-          <SkeletonTable columns={13} />
+          <SkeletonTable columns={14} />
         ) : (
           <DataTable
             columns={[
+              {
+                key: "select",
+                label: <input type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="Select all bookings" />,
+                render: (r) => <input type="checkbox" checked={selectedIds.includes(r.id)} onChange={() => toggle(r.id)} aria-label={`Select ${r.code}`} />,
+              },
               { key: "code", label: "Booking ID" },
               { key: "sender", label: "Sender" },
               { key: "receiver", label: "Receiver" },

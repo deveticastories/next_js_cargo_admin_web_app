@@ -358,6 +358,8 @@ export async function downloadTablePdf(filename: string, data: TablePdfData): Pr
     head: [data.head],
     headStyles,
     body: data.body,
+    // Keep each record on one page instead of splitting its wrapped cells across a page break.
+    rowPageBreak: "avoid",
     ...(data.foot ? { foot: [data.foot], footStyles: headStyles, showFoot: "lastPage" as const } : {}),
     margin: { left: MARGIN, right: MARGIN },
   });

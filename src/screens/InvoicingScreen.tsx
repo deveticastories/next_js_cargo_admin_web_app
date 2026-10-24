@@ -18,10 +18,11 @@ import { Button } from "@/components/ui/Button";
 import { MultiSearchSelect } from "@/components/ui/MultiSearchSelect";
 import { DataTable } from "@/components/ui/DataTable";
 import { Skeleton, SkeletonTable } from "@/components/ui/Skeleton";
+import { canonicalPlace } from "@/services/PricingServices";
 import { flattenPackage, getPackageByBooking, type PackageItemRow } from "@/services/PackageServices";
 import { fmtDate, money } from "@/utils/format";
 import { downloadDeliveryNotePdf, downloadInvoicePdf } from "@/utils/pdf";
-import type { Invoice } from "@/types";
+import type { Invoice, PricingRoute } from "@/types";
 
 type PackingRow = PackageItemRow;
 
@@ -38,6 +39,9 @@ export function InvoicingScreen() {
   const [bookingId, setBookingId] = useState("");
   const [deliveryPartnerId, setDeliveryPartnerId] = useState("");
   const [generating, setGenerating] = useState(false);
+  // Inline fix for a missing / misspelled route price, so the invoice isn't a dead end.
+  const [newPrice, setNewPrice] = useState("");
+  const [savingPrice, setSavingPrice] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [dnContainerId, setDnContainerId] = useState("");
   // Delivery note bookings are multi-select (one PDF per booking).
@@ -60,7 +64,10 @@ export function InvoicingScreen() {
   // India → UAE price for the booking's UOM × repacked bundles, plus the booking's pickup and brand
   // handling charges, minus the receiver's flat discount.
   const receiver = receivers.items.find((r) => r.name === booking?.receiver);
-  const route = pricing.items.find((p) => p.from === "India" && p.to === "UAE" && p.uom === booking?.bundleType);
+  // Same tolerant match as cargo-backend's invoice lookup: any casing, and "Dubai" / "United Arab Emirates" count as UAE.
+  const isIndiaUae = (p: PricingRoute) => canonicalPlace(p.from) === "India" && canonicalPlace(p.to) === "UAE";
+  const route = pricing.items.find((p) => isIndiaUae(p) && p.uom === booking?.bundleType);
+  const otherUoms = pricing.items.filter((p) => isIndiaUae(p) && p.uom !== booking?.bundleType).map((p) => p.uom);
   const unitPrice = route ? Number(route.price) : 0;
   const bundles = booking ? Number(booking.actualBundle || 0) : 0;
   const subtotal = unitPrice * bundles;
@@ -72,7 +79,7 @@ export function InvoicingScreen() {
     : bundles <= 0
       ? "Repacking hasn't been confirmed for this booking yet — the invoice needs its final bundle count."
       : !route
-        ? `No active India → UAE price for "${booking.bundleType || "this unit"}" — add one under Pricing first.`
+        ? `No India → UAE price for "${booking.bundleType || "this unit"}" yet${otherUoms.length ? ` (priced so far: ${otherUoms.join(", ")})` : ""}.`
         : discountAmt > subtotal + additionalCharges
           ? "The receiver's discount is larger than the invoice amount."
           : "";
@@ -110,6 +117,20 @@ export function InvoicingScreen() {
       brandHandlingCharge: split && brand ? brand : undefined,
       total: invoice.amount,
     });
+  };
+
+  /** Adds the missing India → UAE price for the booking's UOM, so the invoice isn't a dead end. */
+  const saveRoutePrice = async () => {
+    if (!booking?.bundleType) return;
+    setSavingPrice(true);
+    try {
+      await pricing.create({ from: "India", to: "UAE", uom: booking.bundleType, price: newPrice });
+      setNewPrice("");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to save the price.");
+    } finally {
+      setSavingPrice(false);
+    }
   };
 
   const generateInvoice = async () => {
@@ -265,6 +286,20 @@ export function InvoicingScreen() {
                 </div>
               ) : (
                 blocker && <div className="cc-error">{blocker}</div>
+              )}
+              {!existingInvoice && bundles > 0 && !route && booking.bundleType && (
+                <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginTop: 8 }}>
+                  <div style={{ flex: 1 }}>
+                    <Field
+                      field={{ key: "np", label: `India → UAE price per ${booking.bundleType}`, type: "number", placeholder: "Price" }}
+                      value={newPrice}
+                      onChange={(_, v) => setNewPrice(v)}
+                    />
+                  </div>
+                  <Button size="sm" onClick={saveRoutePrice} loading={savingPrice} disabled={!(Number(newPrice) > 0)}>
+                    Add price
+                  </Button>
+                </div>
               )}
               <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
                 <Button variant="primary" onClick={generateInvoice} loading={generating} disabled={!existingInvoice && !!blocker}>
