@@ -162,6 +162,9 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [savedMessage, setSavedMessage] = useState("");
+  // The bundle Save just wrote to the database (both modes) — shown in a popup with its
+  // mark ID so the employee can write that number on the physical bundle.
+  const [markIdPopup, setMarkIdPopup] = useState<{ bundleNumber: number; bundleMarkId?: number; items: BundleLineItem[] } | null>(null);
   // Bundle numbers (per booking code) saved from the Ready to ship screen — what the Bundle dropdown locks.
   const [readySavedBundles, setReadySavedBundles] = useState<Map<string, Set<number>>>(new Map());
   const [savedRows, setSavedRows] = useState<SavedItemRow[]>([]);
@@ -396,10 +399,11 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
 
   /**
    * The "Save" button. In ready mode it persists the active bundle's packing
-   * list directly, same as always. In repack mode it does NOT write to the
-   * database — it only adds/updates the active bundle in "Added bundles"
-   * below (for review) and clears the Packing list fields for the next one.
-   * "Confirm" in that panel is what actually saves repack bundles.
+   * list directly, same as always. In repack mode it also writes the bundle to
+   * the database right away — so its real bundle mark ID is known and shown in a
+   * popup for the employee to write on the bundle — then adds it to "Added
+   * bundles" and clears the Packing list fields for the next one. "Confirm" in
+   * that panel still finalizes the booking (bundle count, Repacked by, Package Ready).
    */
   const saveItems = async () => {
     if (mode === "repack") {
@@ -409,18 +413,27 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
         return;
       }
       const bundleNumber = Number(bundle);
+      setSaving(true);
+      setError("");
+      setSavedMessage("");
+      let bundleMarkId: number | undefined;
+      try {
+        // Repacked by is only required at Confirm — don't overwrite a saved one with a blank.
+        ({ bundleMarkId } = await saveBundle(bundleNumber, lines, repackedBy.trim() ? { repackedBy: repackedBy.trim() } : {}));
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : "Failed to save the bundle.");
+        return;
+      } finally {
+        setSaving(false);
+      }
       setStagedBundles((prev) =>
-        // Keeps the bundle's mark ID if it was already confirmed once — the server won't change it.
-        [
-          ...prev.filter((b) => b.bundleNumber !== bundleNumber),
-          { bundleNumber, items: lines, bundleMarkId: prev.find((b) => b.bundleNumber === bundleNumber)?.bundleMarkId },
-        ].sort(
+        [...prev.filter((b) => b.bundleNumber !== bundleNumber), { bundleNumber, items: lines, bundleMarkId }].sort(
           (a, b) => a.bundleNumber - b.bundleNumber
         )
       );
+      setMarkIdPopup({ bundleNumber, bundleMarkId, items: lines });
       setConfirmed(false);
-      setError("");
-      setSavedMessage(`Added Bundle ${bundle} to the list below — click Confirm to save it.`);
+      setSavedMessage(`Saved Bundle ${bundle}${bundleMarkId ? ` (bundle mark ID ${bundleMarkId})` : ""} — click Confirm once every bundle is done.`);
       setLines([emptyLine()]);
       // Hide the Packing list fields — that bundle is done. "Create Bundle"
       // (below) brings them back, blank, for the next one.
@@ -457,6 +470,7 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
         .filter((l) => l.product || l.qty || l.fabric || l.description)
         .map((l, index) => ({ id: `${bookingId}-${bundleNumber}-${index}`, bookingCode: booking?.code ?? bookingId, bundleNumber, bundleMarkId: saved.bundleMarkId, ...l }));
       setAddedItems((prev) => [...prev.filter((r) => r.bundleNumber !== bundleNumber), ...newRows].sort((x, y) => x.bundleNumber - y.bundleNumber));
+      setMarkIdPopup({ bundleNumber, bundleMarkId: saved.bundleMarkId, items: lines });
       // Every bundle of the booking now has a saved packing list — tell the backend too.
       if (booking && saved.totalBundles >= Math.max(1, booking.actualBundle || booking.bundleCount || 1)) {
         await markPackageListAdded(bookingId).catch(() => {});
@@ -602,6 +616,12 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
    * server-side. Starts empty for a newly selected booking and stays after
    * Confirm writes it to the database (so it can still be downloaded).
    */
+  // Every bundle saved for the selected booking so far, with its mark ID — the popup's summary list.
+  const savedBundleMarks: { bundleNumber: number; bundleMarkId?: number }[] =
+    mode === "repack"
+      ? stagedBundles
+      : [...new Map(addedItems.map((r) => [r.bundleNumber, { bundleNumber: r.bundleNumber, bundleMarkId: r.bundleMarkId }])).values()];
+
   const stagedRows: SavedItemRow[] = stagedBundles
     .flatMap((b) =>
       b.items
@@ -819,7 +839,7 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
             </div>
             <div className="cc-panel-desc">
               {mode === "repack"
-                ? "For your review — Save above adds a bundle here, but nothing reaches the database until you click Confirm."
+                ? "Bundles saved for this booking — click Confirm once every bundle is done to update the booking."
                 : "Items saved for the selected booking, across its bundles — pick a bundle, save, pick the next, and it builds up here."}
             </div>
           </div>
@@ -879,6 +899,70 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
               emptyText={mode === "repack" ? "Nothing confirmed yet — click Confirm above." : "Nothing saved yet — save or download a packing list above."}
             />
           )}
+        </div>
+      )}
+
+      {markIdPopup && (
+        <div className="cc-modal-overlay" onMouseDown={(e) => e.target === e.currentTarget && setMarkIdPopup(null)}>
+          <div className="cc-modal" role="dialog" aria-label="Saved packing list">
+            <div className="cc-modal-head">
+              <div className="cc-panel-title">Saved packing list — Bundle {markIdPopup.bundleNumber}</div>
+              <Button variant="ghost" onClick={() => setMarkIdPopup(null)} aria-label="Close">
+                <X size={18} />
+              </Button>
+            </div>
+            <div className="cc-modal-body">
+              <div style={{ textAlign: "center", padding: "12px 0 16px", marginBottom: 14, borderRadius: 10, background: colors.successBg }}>
+                <div className="cc-mini-label" style={{ marginBottom: 4 }}>Bundle mark ID — write this on the bundle</div>
+                <div style={{ fontSize: 44, fontWeight: 800, lineHeight: 1.1, color: colors.success }}>{markIdPopup.bundleMarkId ?? "—"}</div>
+                <div className="cc-panel-desc">
+                  {booking?.code} · Bundle {markIdPopup.bundleNumber}
+                  {markIdPopup.items[0]?.netWeight ? ` · Net ${markIdPopup.items[0].netWeight} kg` : ""}
+                  {markIdPopup.items[0]?.grossWeight ? ` · Gross ${markIdPopup.items[0].grossWeight} kg` : ""}
+                </div>
+              </div>
+              <div className="cc-mini-label">Items</div>
+              <table className="cc-table" style={{ width: "100%", marginBottom: 14 }}>
+                <thead>
+                  <tr>
+                    <th>Product</th>
+                    <th>Fabric</th>
+                    <th>Qty</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {markIdPopup.items
+                    .filter((i) => i.product || i.qty || i.fabric || i.description)
+                    .map((i, index) => (
+                      <tr key={index}>
+                        <td>{i.product || "—"}</td>
+                        <td>{i.fabric || "—"}</td>
+                        <td>{i.qty || 1}</td>
+                        <td>{i.description || "—"}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+              {savedBundleMarks.length > 1 && (
+                <>
+                  <div className="cc-mini-label">All bundles saved for {booking?.code}</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {savedBundleMarks.map((b) => (
+                      <span key={b.bundleNumber} className="cc-badge" style={{ background: colors.successBg, color: colors.success }}>
+                        Bundle {b.bundleNumber} → Mark ID {b.bundleMarkId ?? "—"}
+                      </span>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="cc-modal-foot">
+              <Button variant="primary" onClick={() => setMarkIdPopup(null)}>
+                Done
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </>

@@ -74,6 +74,10 @@ export function InvoicingScreen() {
   const additionalCharges = booking ? Number(booking.pickupCharge || 0) + Number(booking.brandHandlingCharge || 0) : 0;
   const discountAmt = receiver ? Number(receiver.discount || 0) : 0;
   const total = subtotal + additionalCharges - discountAmt;
+  // The chosen delivery partner's charge is added on top of the server's total here only —
+  // cargo-backend's saved `total` leaves it out. Saved invoices read the partner's current charge.
+  const selectedPartner = deliveryPartners.items.find((d) => d.id === deliveryPartnerId);
+  const deliveryCharge = existingInvoice ? Number(existingInvoice.deliveryCharge || 0) : Number(selectedPartner?.charge || 0);
   const blocker = !booking
     ? ""
     : bundles <= 0
@@ -89,7 +93,10 @@ export function InvoicingScreen() {
     return { name, lines: found ? [found.location, found.whatsapp ? `Ph: ${found.whatsapp}` : ""] : [] };
   };
 
-  /** Prints a saved invoice — every figure comes from the invoice cargo-backend stored. */
+  /** What the screen and PDF show as an invoice's total: the server's total plus its delivery partner's charge. */
+  const invoiceTotal = (invoice: Invoice) => invoice.amount + Number(invoice.deliveryCharge || 0);
+
+  /** Prints a saved invoice — every figure comes from the invoice cargo-backend stored, plus the delivery partner's charge. */
   const downloadSavedInvoice = async (invoice: Invoice) => {
     const b = bookings.items.find((x) => x.id === invoice.bookingId);
     const qty = Number(b?.actualBundle || 0);
@@ -106,6 +113,7 @@ export function InvoicingScreen() {
       },
       ...(!split && invoice.additionalCharges ? [{ description: "Additional charges", amount: invoice.additionalCharges }] : []),
       ...(invoice.receivableDiscount ? [{ description: "Receiver discount", amount: -invoice.receivableDiscount }] : []),
+      ...(invoice.deliveryCharge ? [{ description: `Delivery charge (${invoice.deliveryPartner ?? "delivery partner"})`, amount: invoice.deliveryCharge }] : []),
     ];
     await downloadInvoicePdf(`${invoice.code}.pdf`, {
       invoiceNo: invoice.code,
@@ -115,7 +123,7 @@ export function InvoicingScreen() {
       extraCharges: {},
       withoutBillPickupCharge: split && pickup ? pickup : undefined,
       brandHandlingCharge: split && brand ? brand : undefined,
-      total: invoice.amount,
+      total: invoiceTotal(invoice),
     });
   };
 
@@ -275,9 +283,15 @@ export function InvoicingScreen() {
                   onChange={(_, name) => setDeliveryPartnerId(deliveryPartners.items.find((d) => d.name === name)?.id ?? "")}
                 />
               )}
+              {(existingInvoice || selectedPartner) && (
+                <div className="cc-total-row">
+                  <span>Delivery partner charge ({existingInvoice?.deliveryPartner ?? selectedPartner?.name})</span>
+                  <span>+{money(deliveryCharge)}</span>
+                </div>
+              )}
               <div className="cc-total-row" style={{ fontWeight: 700, fontSize: 15 }}>
                 <span>Total</span>
-                <span>{money(existingInvoice?.amount ?? total)}</span>
+                <span>{money(existingInvoice ? invoiceTotal(existingInvoice) : total + deliveryCharge)}</span>
               </div>
               {existingInvoice ? (
                 <div className="cc-panel-desc" style={{ marginTop: 6 }}>
@@ -442,7 +456,7 @@ export function InvoicingScreen() {
               { key: "bookingCode", label: "Booking ID" },
               { key: "container", label: "Container", render: (r) => r.container ?? "—" },
               { key: "deliveryPartner", label: "Delivery partner", render: (r) => r.deliveryPartner ?? "—" },
-              { key: "amount", label: "Total", render: (r) => money(r.amount) },
+              { key: "amount", label: "Total", render: (r) => money(invoiceTotal(r)) },
               {
                 key: "download",
                 label: "",

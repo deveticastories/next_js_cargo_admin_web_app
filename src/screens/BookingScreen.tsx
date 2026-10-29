@@ -37,6 +37,9 @@ export function BookingScreen() {
   // Bookings ticked for the PDF download.
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [downloading, setDownloading] = useState(false);
+  // True while the modal was opened from the Collected pickups table — pick up via and
+  // bundle count then come from that pickup run and can't be changed.
+  const [fromPickup, setFromPickup] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -83,6 +86,11 @@ export function BookingScreen() {
       .filter((p) => !partner || p.transport === partner)
       // Mongo ObjectIds start with their creation time, so the largest id is the newest record.
       .reduce<PickupAssign | undefined>((latest, p) => (!latest || p.id > latest.id ? p : latest), undefined);
+  // Pickup runs marked Collected on the Pickup assign screen — listed above the bookings so
+  // each collected run can be booked straight away, linked to its own LR No.
+  const collectedPickups = pickupAssigns.items.filter((p) => p.pickupStatus === "Collected");
+  const bookingCountByLr = new Map<string, number>();
+  for (const b of bookings.items) bookingCountByLr.set(b.pickupOption, (bookingCountByLr.get(b.pickupOption) ?? 0) + 1);
   const filtered = bookings.items.filter((b) =>
     Object.values(b).some((v) => String(v).toLowerCase().includes(query.toLowerCase()))
   );
@@ -155,12 +163,26 @@ export function BookingScreen() {
       pickupVia: PICKUP_VIA_OPTIONS[0],
     });
     setModalRow("new");
+    setFromPickup(false);
     setError("");
+  };
+  // New booking prefilled from a collected pickup run: linked to that run's LR No, picked up
+  // via its transport, with the collected bundle count as the bundle count. Both are locked.
+  const openNewFromPickup = (pickup: PickupAssign) => {
+    openNew();
+    setForm((f) => ({
+      ...f,
+      pickupVia: pickup.transport,
+      pickupOption: pickup.lrNo,
+      bundleCount: pickup.collectedBundle || pickup.bundleCount,
+    }));
+    setFromPickup(true);
   };
   const openEdit = (row: Booking) => {
     // Every saved booking has a pickup assign (the backend requires one), so it came via our pickup boy.
     setForm({ ...row, date: toDateInputValue(row.date), pickupVia: PICKUP_VIA_OPTIONS[0] });
     setModalRow(row.id);
+    setFromPickup(false);
     setError("");
   };
 
@@ -236,6 +258,40 @@ export function BookingScreen() {
         <StatCard label="Bundles" value={bundleTypeTotals.Bundle} />
         <StatCard label="CBM" value={bundleTypeTotals.CBM} />
         <StatCard label="KG" value={bundleTypeTotals.KG} />
+      </div>
+      <div className="cc-card" style={{ marginBottom: 16 }}>
+        <div className="cc-panel-head">
+          <div>
+            <div className="cc-panel-title">Collected pickups</div>
+            <div className="cc-panel-desc">Pickup runs marked Collected on the Pickup assign screen — book them from here</div>
+          </div>
+        </div>
+        {pickupAssigns.loading ? (
+          <SkeletonTable columns={7} />
+        ) : (
+          <DataTable
+            columns={[
+              { key: "transport", label: "Transport" },
+              { key: "lrNo", label: "LR No" },
+              { key: "bundleCount", label: "Assigned bundles" },
+              { key: "collectedBundle", label: "Collected bundle" },
+              { key: "pickupStatus", label: "Pickup status", render: (r) => <Badge value={r.pickupStatus} /> },
+              { key: "bookings", label: "Bookings", render: (r) => bookingCountByLr.get(r.lrNo) ?? 0 },
+              {
+                key: "book",
+                label: "",
+                render: (r) => (
+                  <Button size="sm" variant="primary" onClick={() => openNewFromPickup(r)}>
+                    <Plus size={13} /> Create booking
+                  </Button>
+                ),
+              },
+            ]}
+            rows={collectedPickups}
+            pageSize={5}
+            emptyText="No collected pickups yet."
+          />
+        )}
       </div>
       <div className="cc-card">
         <div className="cc-panel-head">
@@ -329,14 +385,20 @@ export function BookingScreen() {
             value={(form.pickupVia as string) ?? ""}
             options={pickupViaOptions}
             placeholder="Search pickup partner"
+            disabled={fromPickup}
             onChange={(v) => setForm({ ...form, pickupVia: v, ...(v !== form.pickupVia && { pickupOption: "" }) })}
           />
+          {Boolean(form.pickupOption) && (
+            <div className="cc-panel-desc" style={{ marginTop: -4, marginBottom: 8 }}>
+              Linked pickup: LR {form.pickupOption as string}
+            </div>
+          )}
           <div className="cc-grid-2">
             <Field field={{ key: "date", label: "Booking date", type: "date" }} value={form.date} onChange={set} />
             <Field field={{ key: "billOption", label: "Bill option", type: "select", options: ["With Bill", "Without Bill"] }} value={form.billOption} onChange={set} />
           </div>
           <div className="cc-grid-2">
-            <Field field={{ key: "bundleCount", label: "Bundle count", type: "number" }} value={form.bundleCount} onChange={set} />
+            <Field field={{ key: "bundleCount", label: "Bundle count", type: "number", disabled: fromPickup }} value={form.bundleCount} onChange={set} />
             <Field field={{ key: "bundleType", label: "Bundle type", type: "select", options: ["Bundle", "Box", "CBM", "KG"] }} value={form.bundleType} onChange={set} />
           </div>
           <div className="cc-grid-2">

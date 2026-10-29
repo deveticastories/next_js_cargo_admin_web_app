@@ -2,7 +2,7 @@
  * PDF documents for the Invoicing screen — Invoice and Delivery note share one
  * letterhead/table style (company header, grey-headed bordered tables, signature
  * line). Built with jsPDF's standard fonts, so text is kept to plain Latin
- * characters (amounts print as "Rs." rather than the rupee sign).
+ * characters (amounts print as "AED").
  */
 
 const COMPANY = "INTROLINES PVT LTD";
@@ -12,7 +12,7 @@ const BORDER: [number, number, number] = [150, 150, 150];
 const MARGIN = 15;
 
 export const pdfMoney = (n: number | string | undefined): string =>
-  `Rs. ${Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+  `AED ${Number(n || 0).toLocaleString("en-AE", { maximumFractionDigits: 2 })}`;
 
 export interface PartyDetails {
   name: string;

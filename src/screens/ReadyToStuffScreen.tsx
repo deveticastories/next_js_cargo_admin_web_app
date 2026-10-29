@@ -9,22 +9,27 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRightLeft } from "lucide-react";
+import { ArrowRightLeft, Download, PackageOpen } from "lucide-react";
 import { useCargoData } from "@/components/providers/CargoDataProvider";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { DataTable } from "@/components/ui/DataTable";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { ApiError } from "@/utils/apiClient";
-import { computeBundleMarkIds, getAllPackages, packageBookingId } from "@/services/PackageServices";
+import { computeBundleMarkIds, getAllPackages, nameOf, packageBookingId, type PackageBundleDoc } from "@/services/PackageServices";
 import { updateStuffStatus } from "@/services/BookingServices";
-import { fmtDate } from "@/utils/format";
+import { fmtDate, todayISO } from "@/utils/format";
+import { downloadTablePdf } from "@/utils/pdf";
 
 export function ReadyToStuffScreen() {
-  const { bookings } = useCargoData();
+  const { bookings, products, fabrics } = useCargoData();
   const router = useRouter();
   const [selected, setSelected] = useState<string[]>([]);
   const [moving, setMoving] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadingPackingList, setDownloadingPackingList] = useState(false);
+  // Every saved bundle (with its mark ID) per booking id, in bundle order — the container packing list's source.
+  const [bundlesByBooking, setBundlesByBooking] = useState<Map<string, { bundle: PackageBundleDoc; markId?: number }[]>>(new Map());
   const [error, setError] = useState("");
   // Bundle numbers with a saved packing list (Package ready or Repacking), per booking id.
   const [packedByBooking, setPackedByBooking] = useState<Map<string, Set<number>>>(new Map());
@@ -40,6 +45,7 @@ export function ReadyToStuffScreen() {
         const globalMarkIds = computeBundleMarkIds(packages);
         const map = new Map<string, Set<number>>();
         const markIds = new Map<string, number[]>();
+        const bundles = new Map<string, { bundle: PackageBundleDoc; markId?: number }[]>();
         for (const pkg of packages) {
           const bookingId = packageBookingId(pkg);
           if (!map.has(bookingId)) map.set(bookingId, new Set());
@@ -48,6 +54,8 @@ export function ReadyToStuffScreen() {
           for (const bundle of sortedBundles) {
             map.get(bookingId)!.add(bundle.bundleNo);
             const markId = bundle._id ? globalMarkIds.get(bundle._id) : undefined;
+            if (!bundles.has(bookingId)) bundles.set(bookingId, []);
+            bundles.get(bookingId)!.push({ bundle, markId });
             if (markId) {
               if (!markIds.has(bookingId)) markIds.set(bookingId, []);
               markIds.get(bookingId)!.push(markId);
@@ -56,11 +64,13 @@ export function ReadyToStuffScreen() {
         }
         setPackedByBooking(map);
         setMarkIdsByBooking(markIds);
+        setBundlesByBooking(bundles);
       })
       .catch(() => {
         if (!cancelled) {
           setPackedByBooking(new Map());
           setMarkIdsByBooking(new Map());
+          setBundlesByBooking(new Map());
         }
       })
       .finally(() => {
@@ -83,6 +93,99 @@ export function ReadyToStuffScreen() {
   const allSelected = rows.length > 0 && selectedIds.length === rows.length;
   const toggle = (id: string) => setSelected(selectedIds.includes(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id]);
   const toggleAll = () => setSelected(allSelected ? [] : rows.map((b) => b.id));
+
+  // Same as the Booking screen's Download PDF — covers only the ticked bookings.
+  const downloadPdf = async () => {
+    const picked = rows.filter((b) => selectedIds.includes(b.id));
+    if (!picked.length) return;
+    setDownloading(true);
+    try {
+      await downloadTablePdf(`ready-to-stuff-${todayISO()}.pdf`, {
+        title: "READY TO STUFF LIST",
+        info: [
+          ["Generated On", fmtDate(todayISO())],
+          ["No. of Bookings", String(picked.length)],
+        ],
+        head: ["Sl No", "Booking ID", "Sender", "Receiver", "Bundles", "Bundle Mark IDs", "Date", "Package List", "Status"],
+        body: picked.map((b, i) => [
+          String(i + 1),
+          b.code,
+          b.sender,
+          b.receiver,
+          String(b.actualBundle || b.bundleCount),
+          markIdsByBooking.get(b.id)?.join(", ") || "-",
+          fmtDate(b.date),
+          "Added",
+          "Pending",
+        ]),
+        foot: ["", "Total", "", "", String(picked.reduce((sum, b) => sum + (b.actualBundle || b.bundleCount), 0)), "", "", "", ""],
+      });
+    } catch {
+      alert("Failed to generate the PDF.");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  /**
+   * "Container packing list" — every saved bundle of the ticked bookings, one row per product
+   * line. Bundle-level details (mark ID, booking, bundle no, net/gross weight) print on each
+   * bundle's first row only, so the rows underneath read as that bundle's contents.
+   */
+  const downloadContainerPackingList = async () => {
+    const picked = rows.filter((b) => selectedIds.includes(b.id));
+    if (!picked.length) return;
+    setDownloadingPackingList(true);
+    try {
+      const body: string[][] = [];
+      let bundleCount = 0;
+      let totalQty = 0;
+      let totalNet = 0;
+      let totalGross = 0;
+      for (const b of picked) {
+        for (const { bundle, markId } of bundlesByBooking.get(b.id) ?? []) {
+          bundleCount += 1;
+          totalNet += Number(bundle.netWeight || 0);
+          totalGross += Number(bundle.grossWeight || 0);
+          const lines = bundle.products.length ? bundle.products : [undefined];
+          lines.forEach((line, index) => {
+            totalQty += Number(line?.quantity || 0);
+            const first = index === 0;
+            body.push([
+              first ? String(bundleCount) : "",
+              first ? String(markId ?? "-") : "",
+              first ? b.code : "",
+              first ? b.sender : "",
+              first ? b.receiver : "",
+              first ? String(bundle.bundleNo) : "",
+              line ? nameOf(line.product, products.items) || "-" : "-",
+              line ? nameOf(line.fabric, fabrics.items) || "-" : "-",
+              line ? String(line.quantity ?? "-") : "-",
+              line?.description || "-",
+              first ? String(bundle.netWeight ?? 0) : "",
+              first ? String(bundle.grossWeight ?? 0) : "",
+            ]);
+          });
+        }
+      }
+      await downloadTablePdf(`container-packing-list-${todayISO()}.pdf`, {
+        title: "CONTAINER PACKING LIST",
+        info: [
+          ["Generated On", fmtDate(todayISO())],
+          ["No. of Bookings", String(picked.length)],
+          ["No. of Bundles", String(bundleCount)],
+          ["Total Qty", String(totalQty)],
+        ],
+        head: ["Sl No", "Bundle Mark ID", "Booking ID", "Sender", "Receiver", "Bundle No", "Product", "Fabric", "Qty", "Description", "Net Wt (kg)", "Gross Wt (kg)"],
+        body,
+        foot: ["", "", "Total", "", "", String(bundleCount), "", "", String(totalQty), "", String(totalNet), String(totalGross)],
+      });
+    } catch {
+      alert("Failed to generate the container packing list PDF.");
+    } finally {
+      setDownloadingPackingList(false);
+    }
+  };
 
   const goToStuffing = async () => {
     if (selectedIds.length === 0) return;
@@ -122,6 +225,23 @@ export function ReadyToStuffScreen() {
         <div className="cc-panel-title">
           {rows.length} booking{rows.length === 1 ? "" : "s"} · {totalBundles} bundles
         </div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <Button
+          onClick={downloadPdf}
+          loading={downloading}
+          disabled={!selectedIds.length}
+          title={selectedIds.length ? undefined : "Select at least one booking first"}
+        >
+          {!downloading && <Download size={15} />} Download PDF{selectedIds.length ? ` (${selectedIds.length})` : ""}
+        </Button>
+        <Button
+          onClick={downloadContainerPackingList}
+          loading={downloadingPackingList}
+          disabled={!selectedIds.length}
+          title={selectedIds.length ? "Every bundle of the selected bookings, with mark IDs, products and weights" : "Select at least one booking first"}
+        >
+          {!downloadingPackingList && <PackageOpen size={15} />} Container packing list{selectedIds.length ? ` (${selectedIds.length})` : ""}
+        </Button>
         <Button
           variant="primary"
           onClick={goToStuffing}
@@ -131,6 +251,7 @@ export function ReadyToStuffScreen() {
         >
           {!moving && <ArrowRightLeft size={15} />} Go to stuffing{selectedIds.length ? ` (${selectedIds.length})` : ""}
         </Button>
+        </div>
       </div>
       {error && <div className="cc-alert-error" style={{ margin: "0 18px 12px" }}>{error}</div>}
       {bookings.loading || loadingPacked ? (

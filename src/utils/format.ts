@@ -17,7 +17,7 @@ export const fmtDate = (date?: string): string =>
     : "—";
 
 export const money = (n: number | string | undefined): string =>
-  `₹${Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+  `AED ${Number(n || 0).toLocaleString("en-AE", { maximumFractionDigits: 2 })}`;
 
 /**
  * An `<input type="date">` needs exactly `YYYY-MM-DD`, but dates coming
