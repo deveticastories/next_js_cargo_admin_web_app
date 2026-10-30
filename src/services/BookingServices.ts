@@ -1,9 +1,10 @@
 /**
  * Shipment bookings — cargo-backend's `/bookings` module. `sender`/`receiver`
- * are Customer refs (see `CustomerServices.ts`); `pickupOption` is a required
- * ref to an existing `/pickup-assigns` record, picked by LR No the same way
+ * are Customer refs (see `CustomerServices.ts`); `pickupOption` is a ref to
+ * an existing `/pickup-assigns` record, picked by LR No, and `pickupPartner` a
+ * ref to a `/pickup-partners` record, picked by name — the same way
  * Sender/Receiver are picked by name (store the display field, resolve to id
- * on write).
+ * on write). The backend requires at least one of the two on create.
  *
  * The backend tracks two things the old local-only store modeled as plain
  * booleans: `packingStatus` ("Ready to Ship" | "Repacking Required", renamed
@@ -44,6 +45,7 @@ function toFrontend(doc: BackendDoc, submitted?: Record<string, unknown>): Booki
     sender: refName(doc.sender, submitted?.sender),
     receiver: refName(doc.receiver, submitted?.receiver),
     pickupOption: pickupLrNo(doc.pickupOption, submitted),
+    pickupPartner: refName(doc.pickupPartner, submitted?.pickupPartner),
     date: String(doc.date ?? submitted?.date ?? ""),
     billOption: (doc.billOption as Booking["billOption"]) ?? "",
     bundleCount: Number(doc.bundleCount ?? 0),
@@ -73,16 +75,21 @@ async function toBackend(body: Record<string, unknown>) {
     bundleHandlingCharge: body.bundleHandlingCharge !== undefined ? Number(body.bundleHandlingCharge) || 0 : undefined,
   };
   // Independent lookups — resolve them side by side rather than one after another.
-  const [sender, receiver, pickupOption] = await Promise.all([
+  const [sender, receiver, pickupOption, pickupPartner] = await Promise.all([
     body.sender ? resolveCustomerIdByName(String(body.sender), "Sender") : undefined,
     body.receiver ? resolveCustomerIdByName(String(body.receiver), "Receiver") : undefined,
     body.pickupOption
       ? resolveIdByName(API_ENDPOINTS.PICKUP_ASSIGNS.BASE, "pickupAssigns", String(body.pickupOption), "lrNo")
       : undefined,
+    body.pickupPartner
+      ? resolveIdByName(API_ENDPOINTS.PICKUP_PARTNERS.BASE, "pickupPartners", String(body.pickupPartner))
+      : undefined,
   ]);
   if (body.sender) payload.sender = sender;
   if (body.receiver) payload.receiver = receiver;
-  if (body.pickupOption) payload.pickupOption = pickupOption;
+  // An empty value clears the ref on update (null), e.g. a booking moved off a partner.
+  if ("pickupOption" in body) payload.pickupOption = body.pickupOption ? pickupOption : null;
+  if ("pickupPartner" in body) payload.pickupPartner = body.pickupPartner ? pickupPartner : null;
   const status = statusToBool(body.status);
   if (status !== undefined) payload.status = status;
   return payload;

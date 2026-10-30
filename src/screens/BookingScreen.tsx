@@ -76,9 +76,9 @@ export function BookingScreen() {
   };
 
   // "Pick up via" is our own pickup boy, the sender dropping off at the store, or one of
-  // the active pickup partners. cargo-backend still requires every booking to reference a
-  // Pickup Assign (`pickupOption`), but the form no longer asks for one — on save the booking
+  // the active pickup partners. The form doesn't ask for a Pickup Assign — on save the booking
   // is linked to the most recent assign (that partner's most recent, when a partner is picked).
+  // A partner with no assign yet is linked directly via `pickupPartner` instead.
   const partnerNames = pickupPartners.items.filter((p) => p.status !== "Inactive").map((p) => p.name);
   const pickupViaOptions = [...new Set<string>([...PICKUP_VIA_OPTIONS, ...partnerNames])];
   const latestPickupAssign = (partner: string | null) =>
@@ -179,8 +179,8 @@ export function BookingScreen() {
     setFromPickup(true);
   };
   const openEdit = (row: Booking) => {
-    // Every saved booking has a pickup assign (the backend requires one), so it came via our pickup boy.
-    setForm({ ...row, date: toDateInputValue(row.date), pickupVia: PICKUP_VIA_OPTIONS[0] });
+    // Bookings saved with a partner remember it; the rest came via our pickup boy.
+    setForm({ ...row, date: toDateInputValue(row.date), pickupVia: row.pickupPartner || PICKUP_VIA_OPTIONS[0] });
     setModalRow(row.id);
     setFromPickup(false);
     setError("");
@@ -196,15 +196,13 @@ export function BookingScreen() {
       setError("Direct to Store bookings can't be saved yet — the backend still requires a pickup assign.");
       return;
     }
-    const partner = partnerNames.includes(form.pickupVia as string) ? (form.pickupVia as string) : null;
+    // Any partner, not just active ones — an edited booking may still point at a since-deactivated one.
+    const partner = pickupPartners.items.some((p) => p.name === form.pickupVia) ? (form.pickupVia as string) : null;
     // Editing keeps the booking's existing assign unless "Pick up via" was changed (which clears it).
-    const pickupOption = (form.pickupOption as string) || latestPickupAssign(partner)?.lrNo;
-    if (!pickupOption) {
-      setError(
-        partner
-          ? `No pickup assign exists for ${partner} yet — create one on the Pickup assign screen first.`
-          : "No pickup assign exists yet — create one on the Pickup assign screen first."
-      );
+    // A partner without any assign yet is saved against the partner alone.
+    const pickupOption = (form.pickupOption as string) || latestPickupAssign(partner)?.lrNo || "";
+    if (!pickupOption && !partner) {
+      setError("No pickup assign exists yet — create one on the Pickup assign screen first.");
       return;
     }
     // Each extra charge only applies under its own condition — zero it out
@@ -215,6 +213,7 @@ export function BookingScreen() {
     const payload = {
       ...form,
       pickupOption,
+      pickupPartner: partner ?? "",
       brandHandlingCharge: form.productType === "Branded" ? Number(form.brandHandlingCharge) || 0 : 0,
       pickupCharge: form.billOption === "Without Bill" ? Number(form.pickupCharge) || 0 : 0,
       bundleHandlingCharge: Number(form.bundleCount) < 5 ? Number(form.bundleHandlingCharge) || 0 : 0,

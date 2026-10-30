@@ -120,7 +120,10 @@ export interface PickupAssign extends BaseRecord {
 export interface Booking extends BaseRecord {
   sender: string;
   receiver: string;
+  /** LR No of the linked Pickup Assign — "" when booked straight with a partner (`pickupPartner`). */
   pickupOption: string;
+  /** Pickup Partner name, set when "Pick up via" was a partner — "" otherwise. */
+  pickupPartner: string;
   date: string;
   billOption: BillOption | "";
   bundleCount: number;
