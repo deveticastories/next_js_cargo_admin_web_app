@@ -284,9 +284,19 @@ export function InvoicingScreen() {
                 />
               )}
               {(existingInvoice || selectedPartner) && (
-                <div className="cc-total-row">
-                  <span>Delivery partner charge ({existingInvoice?.deliveryPartner ?? selectedPartner?.name})</span>
-                  <span>+{money(deliveryCharge)}</span>
+                <div style={{ margin: "8px 0" }}>
+                  <div className="cc-total-row">
+                    <span>Receiver</span>
+                    <span>{booking.receiver || "—"}</span>
+                  </div>
+                  <div className="cc-total-row">
+                    <span>Receiver country</span>
+                    <span>{receiver?.country || "—"}</span>
+                  </div>
+                  <div className="cc-total-row">
+                    <span>Delivery partner charge ({existingInvoice?.deliveryPartner ?? selectedPartner?.name})</span>
+                    <span>+{money(deliveryCharge)}</span>
+                  </div>
                 </div>
               )}
               <div className="cc-total-row" style={{ fontWeight: 700, fontSize: 15 }}>
