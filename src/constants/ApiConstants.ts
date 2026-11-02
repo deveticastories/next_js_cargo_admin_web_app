@@ -29,6 +29,7 @@ export const API_ENDPOINTS = {
     LOGIN: "/auth/login",
   },
   EMPLOYEES: crudEndpoints("/employees"),
+  ROLES: crudEndpoints("/roles"),
   CUSTOMERS: crudEndpoints("/customers"),
   STORES: crudEndpoints("/stores"),
   COUNTRIES: crudEndpoints("/countries"),

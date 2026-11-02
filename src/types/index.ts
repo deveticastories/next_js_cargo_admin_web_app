@@ -28,8 +28,6 @@ export type PaymentStatus = "Unpaid" | "Paid";
 
 export type PaymentType = "Cash" | "UPI";
 
-export type EmployeeRole = "Admin" | "Employee";
-
 /** Common fields shared by most master-data records. */
 export interface BaseRecord {
   id: string;
@@ -42,9 +40,16 @@ export interface Employee extends BaseRecord {
   empId: string;
   contact: string;
   bloodGroup?: string;
-  role: EmployeeRole | "";
+  /** Name of the cargo-backend `Role` this member is assigned (resolved to its id on write). */
+  role: string;
   /** Login email. Optional — an employee without one can't sign in themselves. */
   email?: string;
+}
+
+/** Access role an Employee is assigned — cargo-backend's `/roles` module. */
+export interface Role extends BaseRecord {
+  name: string;
+  modules: string[];
 }
 
 export interface Sender extends BaseRecord {

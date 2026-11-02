@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 /** Human names for each collection, used in the banner's "Couldn't load …" message. */
 const LABELS: Record<keyof CargoData, string> = {
   employees: "team",
+  roles: "roles",
   senders: "senders",
   receivers: "receivers",
   stores: "stores",

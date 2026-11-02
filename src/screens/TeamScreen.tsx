@@ -12,7 +12,8 @@ import { MasterView } from "@/components/shared/MasterView";
  * password" (see `src/app/api/employees/[id]/route.ts`).
  */
 export function TeamScreen() {
-  const { employees } = useCargoData();
+  const { employees, roles } = useCargoData();
+  const roleOptions = roles.items.filter((r) => r.status !== "Inactive").map((r) => r.name);
 
   return (
     <MasterView
@@ -23,7 +24,7 @@ export function TeamScreen() {
         { key: "empId", label: "Employee ID", required: true },
         { key: "contact", label: "Contact number", required: true },
         { key: "bloodGroup", label: "Blood group" },
-        { key: "role", label: "Role", type: "select", options: ["Admin", "Employee"], required: true },
+        { key: "role", label: "Role", type: "select", options: roleOptions, required: true },
         { key: "email", label: "Login email", type: "email", required: true },
         {
           key: "password",

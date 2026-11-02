@@ -31,6 +31,7 @@ import type {
   Product,
   ReceiptEntry,
   Receiver,
+  Role,
   Sender,
   Store,
   Stuffing,
@@ -38,6 +39,7 @@ import type {
 } from "@/types";
 import { createCollectionStore, type ApiCollection, type CollectionStore } from "@/utils/useApiCollection";
 import { EmployeeServices } from "@/services/EmployeeServices";
+import { RoleServices } from "@/services/RoleServices";
 import { SenderServices, ReceiverServices } from "@/services/CustomerServices";
 import { StoreServices } from "@/services/StoreServices";
 import { CountryServices } from "@/services/CountryServices";
@@ -59,6 +61,7 @@ import { UaeStoreLogLocalServices } from "@/services/LocalWorkflowServices";
 
 export interface CargoData {
   employees: ApiCollection<Employee>;
+  roles: ApiCollection<Role>;
   senders: ApiCollection<Sender>;
   receivers: ApiCollection<Receiver>;
   stores: ApiCollection<Store>;
@@ -85,6 +88,7 @@ type ItemOf<C> = C extends ApiCollection<infer T> ? T : never;
 const STORES: { [K in keyof CargoData]: CollectionStore<ItemOf<CargoData[K]>> } = {
   // Master-data entities — live against cargo-backend (see src/services).
   employees: createCollectionStore(EmployeeServices, { persistKey: "employees" }),
+  roles: createCollectionStore(RoleServices, { persistKey: "roles" }),
   senders: createCollectionStore(SenderServices, { persistKey: "senders" }),
   receivers: createCollectionStore(ReceiverServices, { persistKey: "receivers" }),
   stores: createCollectionStore(StoreServices, { persistKey: "stores" }),
