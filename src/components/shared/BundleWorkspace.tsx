@@ -25,7 +25,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Download, Plus, Save, X } from "lucide-react";
+import { CheckCircle2, Copy, Download, Plus, Save, Undo2, X } from "lucide-react";
 import type { Booking, BundleLineItem } from "@/types";
 import type { ApiCollection } from "@/utils/useApiCollection";
 import { ApiError } from "@/utils/apiClient";
@@ -107,6 +107,26 @@ export interface BundleWorkspaceProps {
   bookings: ApiCollection<Booking>;
 }
 
+/** A previously entered packing list that "Copy items from" can prefill the open one with. */
+interface CopySource {
+  key: string;
+  label: string;
+  /** Short name for the one-click button / confirmation note, e.g. "Bundle 2" or "BKG-0004 · Bundle 2". */
+  shortLabel: string;
+  items: BundleLineItem[];
+}
+
+const isFilledLine = (l: BundleLineItem) => Boolean(l.product || l.qty || l.unit || l.fabric || l.description);
+const toLineItem = ({ netWeight, grossWeight, product, qty, unit, fabric, description }: BundleLineItem): BundleLineItem => ({
+  netWeight,
+  grossWeight,
+  product,
+  qty,
+  unit,
+  fabric,
+  description,
+});
+
 const bookingLabel = (b?: Booking) => (b ? `${b.code} — ${b.sender} → ${b.receiver}` : "");
 
 export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
@@ -175,6 +195,9 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
   // Ready mode's "Added items" table: this-session only, never written to the database on its own —
   // each Save appends that bundle's items here, and it feeds the ready-to-ship download.
   const [addedItems, setAddedItems] = useState<SavedItemRow[]>([]);
+  // Set right after "Copy items from" prefills the open packing list — drives the
+  // "Copied from …" note and keeps what was there before, so Undo can put it back.
+  const [copyNote, setCopyNote] = useState<{ from: string; count: number; previous: BundleLineItem[] } | null>(null);
 
   const booking = bookings.items.find((b) => b.id === bookingId);
 
@@ -268,6 +291,7 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
 
   const selectBooking = async (id: string) => {
     setBookingId(id);
+    setCopyNote(null);
     setError("");
     setSavedMessage("");
     // Clear the Added items table right away — it reloads scoped to the newly
@@ -321,6 +345,7 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
     // Ready mode hides the Packing list after Save — picking a bundle brings it back.
     setPackingListVisible(true);
     setBundle(n);
+    setCopyNote(null);
     setSavedMessage("");
     // Ready mode always opens a bundle blank — never pre-filled from a previously saved
     // list (e.g. the one Repacking recorded). Repack mode's Create Bundle loads it.
@@ -415,6 +440,7 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
    * that panel still finalizes the booking (bundle count, Repacked by, Package Ready).
    */
   const saveItems = async () => {
+    setCopyNote(null);
     if (mode === "repack") {
       const invalid = lineError(lines);
       if (invalid) {
@@ -652,6 +678,75 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
     )
     .sort((a, b) => a.bundleNumber - b.bundleNumber);
 
+  /**
+   * Earlier packing lists the open one can be copied from — many bundles share the same
+   * items, so re-typing them is wasted effort. This booking's bundles from this session
+   * come first (newest first), then every saved packing list (this booking and others).
+   */
+  const copySources: CopySource[] = (() => {
+    const sources = new Map<string, CopySource>();
+    const add = (bookingCode: string, bundleNumber: number, items: BundleLineItem[]) => {
+      const key = `${bookingCode}#${bundleNumber}`;
+      const filled = items.filter(isFilledLine);
+      // Skip empty lists and the bundle that's open right now — copying it onto itself does nothing.
+      if (sources.has(key) || filled.length === 0) return;
+      if (bookingCode === booking?.code && String(bundleNumber) === bundle) return;
+      const sameBooking = bookingCode === booking?.code;
+      const shortLabel = sameBooking ? `Bundle ${bundleNumber}` : `${bookingCode} · Bundle ${bundleNumber}`;
+      const products = [...new Set(filled.map((l) => l.product).filter(Boolean))];
+      const preview = products.slice(0, 3).join(", ") + (products.length > 3 ? ", …" : "");
+      sources.set(key, {
+        key,
+        shortLabel,
+        label: `${sameBooking ? `${bookingCode} · Bundle ${bundleNumber} (this booking)` : shortLabel} — ${filled.length} item${filled.length === 1 ? "" : "s"}${preview ? `: ${preview}` : ""}`,
+        items: items.map(toLineItem),
+      });
+    };
+    const groupRows = (rows: SavedItemRow[]) => {
+      const groups = new Map<string, { bookingCode: string; bundleNumber: number; items: BundleLineItem[] }>();
+      for (const r of rows) {
+        const key = `${r.bookingCode}#${r.bundleNumber}`;
+        if (!groups.has(key)) groups.set(key, { bookingCode: r.bookingCode, bundleNumber: r.bundleNumber, items: [] });
+        groups.get(key)!.items.push(toLineItem(r));
+      }
+      return [...groups.values()];
+    };
+    if (booking) {
+      const session =
+        mode === "repack"
+          ? stagedBundles.map((b) => ({ bookingCode: booking.code, bundleNumber: b.bundleNumber, items: b.items }))
+          : groupRows(addedItems);
+      [...session].sort((a, b) => b.bundleNumber - a.bundleNumber).forEach((b) => add(b.bookingCode, b.bundleNumber, b.items));
+    }
+    const saved = groupRows(savedRows);
+    // This booking's saved bundles before other bookings', then newest booking/bundle first.
+    saved
+      .sort((a, b) =>
+        Number(b.bookingCode === booking?.code) - Number(a.bookingCode === booking?.code) ||
+        b.bookingCode.localeCompare(a.bookingCode) ||
+        b.bundleNumber - a.bundleNumber
+      )
+      .forEach((b) => add(b.bookingCode, b.bundleNumber, b.items));
+    return [...sources.values()];
+  })();
+  // The one-click "Copy Bundle N" shortcut: the most recent bundle of the booking that's open.
+  const lastBundleSource = copySources.find((src) => src.key.startsWith(`${booking?.code}#`));
+
+  const copyFrom = (key: string) => {
+    const source = copySources.find((src) => src.key === key);
+    if (!source) return;
+    setCopyNote({ from: source.shortLabel, count: source.items.filter(isFilledLine).length, previous: lines });
+    // Fresh objects, so editing the copy never touches the bundle it came from.
+    setLines(source.items.map((l) => ({ ...l })));
+    setError("");
+    setSavedMessage("");
+  };
+  const undoCopy = () => {
+    if (!copyNote) return;
+    setLines(copyNote.previous);
+    setCopyNote(null);
+  };
+
   return (
     <>
       <div className="cc-card" style={{ padding: 18 }}>
@@ -677,7 +772,6 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
                     whatever count is currently shown here. */}
                 <input type="number" min="1" value={bundleInput} disabled style={{ flex: 1 }} />
                 <Button
-                  size="sm"
                   onClick={createBundle}
                   disabled={!bookingId || !bundleInput || packingListVisible}
                   title={packingListVisible ? "Save the open packing list before creating the next bundle" : undefined}
@@ -716,7 +810,41 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
             <>
               {showPackingList ? (
                 <>
-                  <div className="cc-mini-label">Packing list{mode === "repack" && bundle ? ` — Bundle ${bundle}` : ""}</div>
+                  <div className="cc-packing-head">
+                    <div className="cc-mini-label" style={{ marginBottom: 0 }}>
+                      Packing list{bundle ? ` — Bundle ${bundle}` : ""}
+                    </div>
+                    {copySources.length > 0 && (
+                      <div className="cc-packing-copy">
+                        {lastBundleSource && (
+                          <Button onClick={() => copyFrom(lastBundleSource.key)} title={`Fill this packing list with ${lastBundleSource.label}`}>
+                            <Copy size={14} /> Copy {lastBundleSource.shortLabel}
+                          </Button>
+                        )}
+                        <div className="cc-packing-copy-select">
+                          <SearchableSelect
+                            label={lastBundleSource ? "Or copy items from" : "Copy items from"}
+                            placeholder="Pick a previous packing list"
+                            value=""
+                            options={copySources.map((src) => src.key)}
+                            optionLabels={Object.fromEntries(copySources.map((src) => [src.key, src.label]))}
+                            onChange={copyFrom}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {copyNote && (
+                    <div className="cc-note-box" style={{ marginBottom: 12, alignItems: "center" }}>
+                      <Copy size={15} style={{ flexShrink: 0 }} />
+                      <span style={{ flex: 1 }}>
+                        Copied {copyNote.count} item{copyNote.count === 1 ? "" : "s"} from <b>{copyNote.from}</b> — review and edit, then save.
+                      </span>
+                      <Button size="sm" variant="ghost" onClick={undoCopy}>
+                        <Undo2 size={14} /> Undo
+                      </Button>
+                    </div>
+                  )}
                   {/* Same layout in both modes: net/gross weight on top (default first row
                       only) and the product fields below. "Add item" now sits next to Save
                       below, instead of in a header row above the list. */}
@@ -779,8 +907,8 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
                     );
                   })}
 
-                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 20 }}>
-                    <Button size="sm" onClick={addLine}>
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+                    <Button onClick={addLine}>
                       <Plus size={14} /> Add item
                     </Button>
                     <Button variant="primary" onClick={saveItems} loading={saving}>

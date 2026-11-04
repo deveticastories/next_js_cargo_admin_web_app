@@ -42,6 +42,11 @@
   --info-bg: oklch(0.955 0.03 285);
   --violet: oklch(0.44 0.10 300);
   --violet-bg: oklch(0.955 0.03 300);
+  /* One height for every single-line control — text inputs, selects,
+     searchable dropdowns, packing-list line inputs, search bars and
+     default buttons — so fields sitting side by side always line up. */
+  --control-h: 40px;
+  --control-h-sm: 32px;
 
   font-family: var(--font-body), sans-serif;
   color: var(--text);
@@ -281,7 +286,9 @@ table.cc-table tbody tr:nth-child(n+6) { animation-delay: 140ms; }
 .cc-content {
   flex: 1;
   overflow-y: auto;
-  padding: 24px 28px 60px;
+  /* Inline padding grows past ~1760px of content so ultra-wide monitors get
+     a centred column instead of forms stretched edge to edge. */
+  padding: 24px max(28px, calc((100% - 1760px) / 2)) 60px;
   animation: cc-fade-in 0.28s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .cc-page-head {
@@ -347,8 +354,10 @@ table.cc-table tbody tr:nth-child(n+6) { animation-delay: 140ms; }
   align-items: center;
   gap: 8px;
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 8px 12px;
+  border-radius: 9px;
+  height: var(--control-h);
+  box-sizing: border-box;
+  padding: 0 12px;
   background: var(--bg);
   min-width: 220px;
   transition: border-color 0.13s ease, background-color 0.13s ease;
@@ -371,9 +380,13 @@ table.cc-table tbody tr:nth-child(n+6) { animation-delay: 140ms; }
   align-items: center;
   gap: 6px;
   font-family: var(--font-heading), sans-serif;
+  justify-content: center;
   font-size: 13.5px;
   font-weight: 600;
-  padding: 8px 15px;
+  min-height: var(--control-h);
+  box-sizing: border-box;
+  padding: 0 16px;
+  white-space: nowrap;
   border-radius: 9px;
   border: 1px solid var(--border);
   background: var(--surface);
@@ -403,6 +416,7 @@ table.cc-table tbody tr:nth-child(n+6) { animation-delay: 140ms; }
 .cc-btn-ghost {
   border: none;
   background: transparent;
+  min-height: 0;
   padding: 6px;
   border-radius: 8px;
 }
@@ -421,7 +435,8 @@ table.cc-table tbody tr:nth-child(n+6) { animation-delay: 140ms; }
   animation: cc-spin 0.6s linear infinite;
 }
 .cc-btn-sm {
-  padding: 5px 11px;
+  min-height: var(--control-h-sm);
+  padding: 0 12px;
   font-size: 12.5px;
 }
 /** Filter/tab pill — see Customers, Reports tabs. Outlined + tinted when active, unlike the solid `.cc-btn-primary`. */
@@ -636,13 +651,18 @@ table.cc-table tr.cc-table-expanded:hover > td {
   display: block;
   font-size: 12.5px;
   font-weight: 500;
+  line-height: 1.3;
   color: var(--text-soft);
   margin-bottom: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .cc-field input,
 .cc-field select,
 .cc-field textarea {
   width: 100%;
+  box-sizing: border-box;
   border: 1px solid var(--border);
   border-radius: 9px;
   padding: 9px 12px;
@@ -651,6 +671,19 @@ table.cc-table tr.cc-table-expanded:hover > td {
   color: var(--text);
   background: var(--surface);
   transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.cc-field input:where(:not([type="checkbox"]):not([type="radio"])),
+.cc-field select {
+  height: var(--control-h);
+  padding-top: 0;
+  padding-bottom: 0;
+}
+.cc-field input:disabled,
+.cc-field select:disabled,
+.cc-field textarea:disabled {
+  background: var(--bg);
+  color: var(--text-soft);
+  cursor: not-allowed;
 }
 .cc-field input:focus,
 .cc-field select:focus,
@@ -665,9 +698,14 @@ table.cc-table tr.cc-table-expanded:hover > td {
 }
 .cc-searchselect-control {
   width: 100%;
+  box-sizing: border-box;
+  height: var(--control-h);
+  display: flex;
+  align-items: center;
+  min-width: 0;
   border: 1px solid var(--border);
   border-radius: 9px;
-  padding: 9px 12px;
+  padding: 0 12px;
   font-size: 14px;
   background: var(--surface);
   cursor: pointer;
@@ -681,15 +719,24 @@ table.cc-table tr.cc-table-expanded:hover > td {
   opacity: 0.6;
   border-color: var(--border);
 }
+.cc-searchselect-control > span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .cc-searchselect-placeholder {
   color: var(--text-faint);
 }
 .cc-searchselect-input {
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 8px;
 }
 .cc-searchselect-input input {
+  height: auto;
+  padding: 0;
+  box-shadow: none;
   border: none;
   outline: none;
   background: transparent;
@@ -758,8 +805,9 @@ table.cc-table tr.cc-table-expanded:hover > td {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  min-height: 40px;
-  padding: 5px 8px 5px 10px;
+  height: auto;
+  min-height: var(--control-h);
+  padding: 4px 8px 4px 10px;
   cursor: text;
 }
 .cc-multiselect-control.open {
@@ -802,6 +850,9 @@ table.cc-table tr.cc-table-expanded:hover > td {
   gap: 8px;
 }
 .cc-multiselect-input input {
+  height: auto;
+  padding: 0;
+  box-shadow: none;
   border: none;
   outline: none;
   background: transparent;
@@ -981,9 +1032,11 @@ table.cc-table tr.cc-table-expanded:hover > td {
 }
 .cc-line-input {
   border: 1px solid var(--border);
-  border-radius: 7px;
-  padding: 6px 8px;
-  font-size: 12.5px;
+  border-radius: 9px;
+  height: var(--control-h);
+  box-sizing: border-box;
+  padding: 0 12px;
+  font-size: 14px;
   width: 100%;
   font-family: var(--font-body), sans-serif;
   color: var(--text);
@@ -992,6 +1045,7 @@ table.cc-table tr.cc-table-expanded:hover > td {
 .cc-line-input:focus {
   outline: none;
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 /* Ready-to-ship's net/gross weight boxes: visible, but recorded during repacking, not here. */
 .cc-line-input[readonly] {
@@ -1001,44 +1055,99 @@ table.cc-table tr.cc-table-expanded:hover > td {
 }
 .cc-line-input[readonly]:focus {
   border-color: var(--border);
+  box-shadow: none;
 }
 /* Ready-to-ship's two-row-per-item layout: net/gross weight on top, product
    fields below, each item boxed so the split reads as one unit. */
 .cc-line-item-card {
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 12px;
-  margin-bottom: 10px;
+  border-radius: 12px;
+  background: oklch(0.993 0.002 228);
+  padding: 14px 16px;
+  margin-bottom: 12px;
 }
 .cc-line-item-weights {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin-bottom: 10px;
-  padding-bottom: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
   border-bottom: 1px dashed var(--border);
 }
+/* Product · Qty · Unit · Fabric · Description · remove — Qty is a fixed,
+   compact column (it only ever holds a few digits); the rest share the width. */
 .cc-line-item-products {
   display: grid;
-  grid-template-columns: 1.4fr 0.7fr 1fr 1.4fr auto;
-  gap: 8px;
+  grid-template-columns: minmax(0, 2fr) 96px minmax(0, 1.2fr) minmax(0, 1.6fr) minmax(0, 2fr) var(--control-h);
+  gap: 12px;
   align-items: end;
 }
-.cc-line-field label {
-  display: block;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-soft);
-  margin-bottom: 4px;
+.cc-line-field {
+  min-width: 0;
 }
-/* Product / Fabric searchable selects inside a packing-list line — match the line's own label size. */
+/* Every label in a packing-list line (plain inputs and searchable selects
+   alike) gets the same size/spacing, so all controls start on one baseline. */
+.cc-line-field label,
 .cc-line-field .cc-searchselect label {
-  font-size: 11px;
+  display: block;
+  font-size: 12px;
   font-weight: 600;
-  margin-bottom: 4px;
+  line-height: 1.3;
+  color: var(--text-soft);
+  margin-bottom: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .cc-line-remove {
   align-self: end;
+  width: var(--control-h);
+  height: var(--control-h);
+  justify-content: center;
+  color: var(--text-faint);
+  border: 1px solid transparent;
+}
+.cc-line-remove:not(:disabled):hover {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+/* Small status selects rendered inside table cells (Pre-booking, Receipt entry). */
+.cc-table select {
+  height: var(--control-h-sm);
+  padding: 0 28px 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background-color: var(--surface);
+  font-size: 13px;
+  font-family: var(--font-body), sans-serif;
+  color: var(--text);
+  cursor: pointer;
+}
+/* Packing list header: title on the left, "Copy items from" controls on the right. */
+.cc-packing-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.cc-packing-copy {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.cc-packing-copy-select {
+  width: 380px;
+  max-width: 100%;
+}
+@media (max-width: 600px) {
+  .cc-packing-copy,
+  .cc-packing-copy-select {
+    width: 100%;
+  }
 }
 .cc-note-box {
   background: var(--info-bg);
@@ -1063,6 +1172,19 @@ table.cc-table tr.cc-table-expanded:hover > td {
 /* Responsive                                                              */
 /* ---------------------------------------------------------------------- */
 
+/* Small laptops / landscape tablets: the packing-list line drops to two rows. */
+@media (max-width: 1280px) {
+  .cc-line-item-products {
+    grid-template-columns: minmax(0, 2fr) 96px minmax(0, 1.4fr) var(--control-h);
+  }
+  .cc-line-item-products > :nth-child(4) {
+    grid-column: 1 / 2;
+  }
+  .cc-line-item-products > :nth-child(5) {
+    grid-column: 2 / 4;
+  }
+}
+
 @media (max-width: 900px) {
   .cc-sidebar {
     position: fixed;
@@ -1085,11 +1207,29 @@ table.cc-table tr.cc-table-expanded:hover > td {
   .cc-content {
     padding: 16px;
   }
+  .cc-search {
+    min-width: 0;
+    flex: 1;
+  }
   .cc-login {
     grid-template-columns: 1fr !important;
   }
   .cc-login-panel {
     display: none !important;
+  }
+}
+
+/* Phones: every packing-list field on its own row, remove button last. */
+@media (max-width: 600px) {
+  .cc-line-item-weights,
+  .cc-line-item-products {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cc-line-item-products > :nth-child(n) {
+    grid-column: auto;
+  }
+  .cc-line-remove {
+    justify-self: end;
   }
 }
 

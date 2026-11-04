@@ -23,7 +23,8 @@ const PICKUP_VIA_OPTIONS = ["Our Pickup Boy", "Direct to Store"] as const;
 
 /** Create and track shipment bookings — the entry point of the whole cargo workflow. */
 export function BookingScreen() {
-  const { bookings, senders, receivers, pickupAssigns, pickupPartners } = useCargoData();
+  const { bookings, senders, receivers, pickupAssigns, pickupPartners } =
+    useCargoData();
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [modalRow, setModalRow] = useState<string | "new" | null>(null);
@@ -32,7 +33,9 @@ export function BookingScreen() {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   // Bundle numbers whose packing list was saved (Package ready or Repacking), per booking id.
-  const [listedByBooking, setListedByBooking] = useState<Map<string, Set<number>>>(new Map());
+  const [listedByBooking, setListedByBooking] = useState<
+    Map<string, Set<number>>
+  >(new Map());
   const [loadingLists, setLoadingLists] = useState(true);
   // Bookings ticked for the PDF download.
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -50,7 +53,8 @@ export function BookingScreen() {
         for (const pkg of packages) {
           const bookingId = packageBookingId(pkg);
           if (!map.has(bookingId)) map.set(bookingId, new Set());
-          for (const bundle of pkg.bundles) map.get(bookingId)!.add(bundle.bundleNo);
+          for (const bundle of pkg.bundles)
+            map.get(bookingId)!.add(bundle.bundleNo);
         }
         setListedByBooking(map);
       })
@@ -67,11 +71,19 @@ export function BookingScreen() {
 
   // "Added" once every bundle of the booking has a saved packing list.
   const packageListAdded = (b: Booking) =>
-    (listedByBooking.get(b.id)?.size ?? 0) >= Math.max(1, b.actualBundle || b.bundleCount || 1);
+    (listedByBooking.get(b.id)?.size ?? 0) >=
+    Math.max(1, b.actualBundle || b.bundleCount || 1);
 
-  const addCustomerFromSearch = (tab: "sender" | "receiver", typedName: string) => {
-    const params = new URLSearchParams({ tab, [tab === "sender" ? "newSender" : "newReceiver"]: "1" });
-    if (typedName) params.set(tab === "sender" ? "senderName" : "receiverName", typedName);
+  const addCustomerFromSearch = (
+    tab: "sender" | "receiver",
+    typedName: string,
+  ) => {
+    const params = new URLSearchParams({
+      tab,
+      [tab === "sender" ? "newSender" : "newReceiver"]: "1",
+    });
+    if (typedName)
+      params.set(tab === "sender" ? "senderName" : "receiverName", typedName);
     router.push(`/admin/customers?${params.toString()}`);
   };
 
@@ -79,44 +91,92 @@ export function BookingScreen() {
   // the active pickup partners. The form doesn't ask for a Pickup Assign — on save the booking
   // is linked to the most recent assign (that partner's most recent, when a partner is picked).
   // A partner with no assign yet is linked directly via `pickupPartner` instead.
-  const partnerNames = pickupPartners.items.filter((p) => p.status !== "Inactive").map((p) => p.name);
-  const pickupViaOptions = [...new Set<string>([...PICKUP_VIA_OPTIONS, ...partnerNames])];
+  const partnerNames = pickupPartners.items
+    .filter((p) => p.status !== "Inactive")
+    .map((p) => p.name);
+  const pickupViaOptions = [...new Set<string>([...partnerNames])];
   const latestPickupAssign = (partner: string | null) =>
     pickupAssigns.items
       .filter((p) => !partner || p.transport === partner)
       // Mongo ObjectIds start with their creation time, so the largest id is the newest record.
-      .reduce<PickupAssign | undefined>((latest, p) => (!latest || p.id > latest.id ? p : latest), undefined);
+      .reduce<PickupAssign | undefined>(
+        (latest, p) => (!latest || p.id > latest.id ? p : latest),
+        undefined,
+      );
   // Pickup runs marked Collected on the Pickup assign screen — listed above the bookings so
   // each collected run can be booked straight away, linked to its own LR No.
-  const collectedPickups = pickupAssigns.items.filter((p) => p.pickupStatus === "Collected");
+  const collectedPickups = pickupAssigns.items.filter(
+    (p) => p.pickupStatus === "Collected",
+  );
   const bookingCountByLr = new Map<string, number>();
-  for (const b of bookings.items) bookingCountByLr.set(b.pickupOption, (bookingCountByLr.get(b.pickupOption) ?? 0) + 1);
+  for (const b of bookings.items)
+    bookingCountByLr.set(
+      b.pickupOption,
+      (bookingCountByLr.get(b.pickupOption) ?? 0) + 1,
+    );
   const filtered = bookings.items.filter((b) =>
-    Object.values(b).some((v) => String(v).toLowerCase().includes(query.toLowerCase()))
+    Object.values(b).some((v) =>
+      String(v).toLowerCase().includes(query.toLowerCase()),
+    ),
   );
   // Header checkbox selects/clears every booking currently shown (respecting the search).
-  const allSelected = filtered.length > 0 && filtered.every((b) => selectedIds.includes(b.id));
+  const allSelected =
+    filtered.length > 0 && filtered.every((b) => selectedIds.includes(b.id));
   const toggleAll = () =>
-    setSelectedIds(allSelected ? selectedIds.filter((id) => !filtered.some((b) => b.id === id)) : [...new Set([...selectedIds, ...filtered.map((b) => b.id)])]);
-  const toggle = (id: string) => setSelectedIds(selectedIds.includes(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id]);
+    setSelectedIds(
+      allSelected
+        ? selectedIds.filter((id) => !filtered.some((b) => b.id === id))
+        : [...new Set([...selectedIds, ...filtered.map((b) => b.id)])],
+    );
+  const toggle = (id: string) =>
+    setSelectedIds(
+      selectedIds.includes(id)
+        ? selectedIds.filter((x) => x !== id)
+        : [...selectedIds, id],
+    );
   // Ticked bookings — the PDF covers only these. Deleted ones simply drop out.
-  const selectedBookings = bookings.items.filter((b) => selectedIds.includes(b.id));
+  const selectedBookings = bookings.items.filter((b) =>
+    selectedIds.includes(b.id),
+  );
 
   const packStatusLabel = (b: Booking) =>
-    b.repackingStatus === "Ready to Ship" || (!loadingLists && packageListAdded(b)) ? "Package Ready" : b.repackingStatus === "Repacking Required" ? "Repacking" : b.repackingStatus || "-";
+    b.repackingStatus === "Ready to Ship" ||
+    (!loadingLists && packageListAdded(b))
+      ? "Package Ready"
+      : b.repackingStatus === "Repacking Required"
+        ? "Repacking"
+        : b.repackingStatus || "-";
 
   const downloadPdf = async () => {
     if (!selectedBookings.length) return;
     setDownloading(true);
     try {
-      const sum = (pick: (b: Booking) => number) => selectedBookings.reduce((total, b) => total + (Number(pick(b)) || 0), 0);
+      const sum = (pick: (b: Booking) => number) =>
+        selectedBookings.reduce(
+          (total, b) => total + (Number(pick(b)) || 0),
+          0,
+        );
       await downloadTablePdf(`bookings-${todayISO()}.pdf`, {
         title: "BOOKING LIST",
         info: [
           ["Generated On", fmtDate(todayISO())],
           ["No. of Bookings", String(selectedBookings.length)],
         ],
-        head: ["Sl No", "Booking ID", "Date", "Sender", "Receiver", "Bill", "Bundle Count", "Bundle", "Bundle Type", "Product Type", "Bundle Handling", "Pack Status", "Status"],
+        head: [
+          "Sl No",
+          "Booking ID",
+          "Date",
+          "Sender",
+          "Receiver",
+          "Bill",
+          "Bundle Count",
+          "Bundle",
+          "Bundle Type",
+          "Product Type",
+          "Bundle Handling",
+          "Pack Status",
+          "Status",
+        ],
         body: selectedBookings.map((b, i) => [
           String(i + 1),
           b.code,
@@ -132,7 +192,21 @@ export function BookingScreen() {
           packStatusLabel(b),
           b.stuffed ? "Stuffed" : "Pending",
         ]),
-        foot: ["", "Total", "", "", "", "", String(sum((b) => b.bundleCount)), String(sum((b) => b.actualBundle)), "", "", pdfMoney(sum((b) => b.bundleHandlingCharge)), "", ""],
+        foot: [
+          "",
+          "Total",
+          "",
+          "",
+          "",
+          "",
+          String(sum((b) => b.bundleCount)),
+          String(sum((b) => b.actualBundle)),
+          "",
+          "",
+          pdfMoney(sum((b) => b.bundleHandlingCharge)),
+          "",
+          "",
+        ],
       });
     } catch {
       alert("Failed to generate the PDF.");
@@ -145,7 +219,12 @@ export function BookingScreen() {
     .filter((b) => b.repackingStatus === "Ready to Ship")
     .reduce((sum, b) => sum + Number(b.bundleCount || 0), 0);
   // Bundle count total per unit of measure, across every booking.
-  const bundleTypeTotals: Record<string, number> = { Bundle: 0, Box: 0, CBM: 0, KG: 0 };
+  const bundleTypeTotals: Record<string, number> = {
+    Bundle: 0,
+    Box: 0,
+    CBM: 0,
+    KG: 0,
+  };
   for (const b of bookings.items) {
     if (b.bundleType && b.bundleType in bundleTypeTotals) {
       bundleTypeTotals[b.bundleType] += Number(b.bundleCount || 0);
@@ -180,25 +259,48 @@ export function BookingScreen() {
   };
   const openEdit = (row: Booking) => {
     // Bookings saved with a partner remember it; the rest came via our pickup boy.
-    setForm({ ...row, date: toDateInputValue(row.date), pickupVia: row.pickupPartner || (row.pickupVia === "Direct to Store" ? "Direct to Store" : PICKUP_VIA_OPTIONS[0]) });
+    setForm({
+      ...row,
+      date: toDateInputValue(row.date),
+      pickupVia:
+        row.pickupPartner ||
+        (row.pickupVia === "Direct to Store"
+          ? "Direct to Store"
+          : PICKUP_VIA_OPTIONS[0]),
+    });
     setModalRow(row.id);
     setFromPickup(false);
     setError("");
   };
 
   const save = async () => {
-    if (!form.sender || !form.receiver || !form.pickupVia || !form.bundleCount) {
+    if (
+      !form.sender ||
+      !form.receiver ||
+      !form.pickupVia ||
+      !form.bundleCount
+    ) {
       setError("Sender, receiver, pick up via and bundle count are required.");
       return;
     }
     const directToStore = form.pickupVia === "Direct to Store";
     // Any partner, not just active ones — an edited booking may still point at a since-deactivated one.
-    const partner = pickupPartners.items.some((p) => p.name === form.pickupVia) ? (form.pickupVia as string) : null;
+    const partner = pickupPartners.items.some((p) => p.name === form.pickupVia)
+      ? (form.pickupVia as string)
+      : null;
     // Direct to Store never links an assign. Otherwise editing keeps the booking's existing assign unless
     // "Pick up via" was changed (which clears it), and a new booking links the newest one if any exists —
     // with none, Our Pickup Boy saves unlinked and a partner saves against the partner alone.
-    const pickupOption = directToStore ? "" : (form.pickupOption as string) || latestPickupAssign(partner)?.lrNo || "";
-    const pickupVia: Booking["pickupVia"] = directToStore ? "Direct to Store" : partner ? "Pickup Partner" : "Our Pickup Boy";
+    const pickupOption = directToStore
+      ? ""
+      : (form.pickupOption as string) ||
+        latestPickupAssign(partner)?.lrNo ||
+        "";
+    const pickupVia: Booking["pickupVia"] = directToStore
+      ? "Direct to Store"
+      : partner
+        ? "Pickup Partner"
+        : "Our Pickup Boy";
     // Each extra charge only applies under its own condition — zero it out
     // here (regardless of what's still sitting in the hidden field) so a
     // charge typed in while its condition held can never be saved once the
@@ -209,9 +311,16 @@ export function BookingScreen() {
       pickupOption,
       pickupPartner: partner ?? "",
       pickupVia,
-      brandHandlingCharge: form.productType === "Branded" ? Number(form.brandHandlingCharge) || 0 : 0,
-      pickupCharge: form.billOption === "Without Bill" ? Number(form.pickupCharge) || 0 : 0,
-      bundleHandlingCharge: Number(form.bundleCount) < 5 ? Number(form.bundleHandlingCharge) || 0 : 0,
+      brandHandlingCharge:
+        form.productType === "Branded"
+          ? Number(form.brandHandlingCharge) || 0
+          : 0,
+      pickupCharge:
+        form.billOption === "Without Bill" ? Number(form.pickupCharge) || 0 : 0,
+      bundleHandlingCharge:
+        Number(form.bundleCount) < 5
+          ? Number(form.bundleHandlingCharge) || 0
+          : 0,
     };
     setSaving(true);
     try {
@@ -219,7 +328,11 @@ export function BookingScreen() {
       else await bookings.update(modalRow as string, payload);
       setModalRow(null);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Something went wrong. Please try again.");
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Something went wrong. Please try again.",
+      );
     } finally {
       setSaving(false);
     }
@@ -231,7 +344,9 @@ export function BookingScreen() {
     try {
       await bookings.remove(row.id);
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Failed to delete booking.");
+      alert(
+        err instanceof ApiError ? err.message : "Failed to delete booking.",
+      );
     } finally {
       setDeletingId(null);
     }
@@ -241,7 +356,8 @@ export function BookingScreen() {
 
   const showBrandHandlingCharge = form.productType === "Branded";
   const showPickupCharge = form.billOption === "Without Bill";
-  const showBundleHandlingCharge = Number(form.bundleCount) > 0 && Number(form.bundleCount) < 5;
+  const showBundleHandlingCharge =
+    Number(form.bundleCount) > 0 && Number(form.bundleCount) < 5;
 
   return (
     <div>
@@ -257,7 +373,10 @@ export function BookingScreen() {
         <div className="cc-panel-head">
           <div>
             <div className="cc-panel-title">Collected pickups</div>
-            <div className="cc-panel-desc">Pickup runs marked Collected on the Pickup assign screen — book them from here</div>
+            <div className="cc-panel-desc">
+              Pickup runs marked Collected on the Pickup assign screen — book
+              them from here
+            </div>
           </div>
         </div>
         {pickupAssigns.loading ? (
@@ -269,13 +388,25 @@ export function BookingScreen() {
               { key: "lrNo", label: "LR No" },
               { key: "bundleCount", label: "Assigned bundles" },
               { key: "collectedBundle", label: "Collected bundle" },
-              { key: "pickupStatus", label: "Pickup status", render: (r) => <Badge value={r.pickupStatus} /> },
-              { key: "bookings", label: "Bookings", render: (r) => bookingCountByLr.get(r.lrNo) ?? 0 },
+              {
+                key: "pickupStatus",
+                label: "Pickup status",
+                render: (r) => <Badge value={r.pickupStatus} />,
+              },
+              {
+                key: "bookings",
+                label: "Bookings",
+                render: (r) => bookingCountByLr.get(r.lrNo) ?? 0,
+              },
               {
                 key: "book",
                 label: "",
                 render: (r) => (
-                  <Button size="sm" variant="primary" onClick={() => openNewFromPickup(r)}>
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={() => openNewFromPickup(r)}
+                  >
                     <Plus size={13} /> Create booking
                   </Button>
                 ),
@@ -291,17 +422,28 @@ export function BookingScreen() {
         <div className="cc-panel-head">
           <div>
             <div className="cc-panel-title">Bookings</div>
-            <div className="cc-panel-desc">Every shipment booked, with its current pack status</div>
+            <div className="cc-panel-desc">
+              Every shipment booked, with its current pack status
+            </div>
           </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <SearchBar value={query} onChange={setQuery} placeholder="Search bookings" />
+            <SearchBar
+              value={query}
+              onChange={setQuery}
+              placeholder="Search bookings"
+            />
             <Button
               onClick={downloadPdf}
               loading={downloading}
               disabled={!selectedBookings.length}
-              title={selectedBookings.length ? undefined : "Select at least one booking first"}
+              title={
+                selectedBookings.length
+                  ? undefined
+                  : "Select at least one booking first"
+              }
             >
-              {!downloading && <Download size={15} />} Download PDF{selectedBookings.length ? ` (${selectedBookings.length})` : ""}
+              {!downloading && <Download size={15} />} Download PDF
+              {selectedBookings.length ? ` (${selectedBookings.length})` : ""}
             </Button>
             <Button variant="primary" onClick={openNew}>
               <Plus size={15} /> New booking
@@ -315,8 +457,22 @@ export function BookingScreen() {
             columns={[
               {
                 key: "select",
-                label: <input type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="Select all bookings" />,
-                render: (r) => <input type="checkbox" checked={selectedIds.includes(r.id)} onChange={() => toggle(r.id)} aria-label={`Select ${r.code}`} />,
+                label: (
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={toggleAll}
+                    aria-label="Select all bookings"
+                  />
+                ),
+                render: (r) => (
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.includes(r.id)}
+                    onChange={() => toggle(r.id)}
+                    aria-label={`Select ${r.code}`}
+                  />
+                ),
               },
               { key: "code", label: "Booking ID" },
               { key: "sender", label: "Sender" },
@@ -324,25 +480,73 @@ export function BookingScreen() {
               { key: "date", label: "Date", render: (r) => fmtDate(r.date) },
               { key: "bundleCount", label: "Actual bundle" },
               // Set by the Repacking screen's "Confirm" action, not the booking form — 0/"—" until repacking's been confirmed once.
-              { key: "actualBundle", label: "Bundle", render: (r) => (r.actualBundle ? r.actualBundle : "—") },
-              { key: "bundleType", label: "Bundle type", render: (r) => r.bundleType || "—" },
+              {
+                key: "actualBundle",
+                label: "Bundle",
+                render: (r) => (r.actualBundle ? r.actualBundle : "—"),
+              },
+              {
+                key: "bundleType",
+                label: "Bundle type",
+                render: (r) => r.bundleType || "—",
+              },
               // Only charged when the booking has fewer than 5 bundles — "—" otherwise.
-              { key: "bundleHandlingCharge", label: "Bundle handling charge (below 5 bundles)", render: (r) => (r.bundleHandlingCharge ? money(r.bundleHandlingCharge) : "—") },
+              {
+                key: "bundleHandlingCharge",
+                label: "Bundle handling charge (below 5 bundles)",
+                render: (r) =>
+                  r.bundleHandlingCharge ? money(r.bundleHandlingCharge) : "—",
+              },
               { key: "productType", label: "Product type" },
-              { key: "billOption", label: "Bill", render: (r) => <Badge value={r.billOption} /> },
+              {
+                key: "billOption",
+                label: "Bill",
+                render: (r) => <Badge value={r.billOption} />,
+              },
               // A booking whose package list is Added reads as Package Ready, even if it was saved as Repacking Required.
-              { key: "repackingStatus", label: "Pack status", render: (r) => (r.repackingStatus === "Ready to Ship" || (!loadingLists && packageListAdded(r)) ? <Badge value="Ready to Ship" label="Package Ready" /> : <Badge value={r.repackingStatus} />) },
-              { key: "packageListStatus", label: "Package list status", render: (r) => (loadingLists ? "…" : packageListAdded(r) ? <Badge value="Added" /> : "—") },
-              { key: "status", label: "Status", render: (r) => <Badge value={r.stuffed ? "Stuffed" : "Pending"} /> },
+              {
+                key: "repackingStatus",
+                label: "Pack status",
+                render: (r) =>
+                  r.repackingStatus === "Ready to Ship" ||
+                  (!loadingLists && packageListAdded(r)) ? (
+                    <Badge value="Ready to Ship" label="Package Ready" />
+                  ) : (
+                    <Badge value={r.repackingStatus} />
+                  ),
+              },
+              {
+                key: "packageListStatus",
+                label: "Package list status",
+                render: (r) =>
+                  loadingLists ? (
+                    "…"
+                  ) : packageListAdded(r) ? (
+                    <Badge value="Added" />
+                  ) : (
+                    "—"
+                  ),
+              },
+              {
+                key: "status",
+                label: "Status",
+                render: (r) => (
+                  <Badge value={r.stuffed ? "Stuffed" : "Pending"} />
+                ),
+              },
             ]}
             rows={filtered}
             pageSize={15}
             onEdit={openEdit}
             onDelete={removeBooking}
             // Once a booking has been marked Ready to Ship or repacked, it's part of the downstream workflow.
-            canDelete={(r) => r.repackingStatus !== "Ready to Ship" && !r.actualBundle}
+            canDelete={(r) =>
+              r.repackingStatus !== "Ready to Ship" && !r.actualBundle
+            }
             // Edit follows the same rule as delete — hidden whenever the delete icon is.
-            canEdit={(r) => r.repackingStatus !== "Ready to Ship" && !r.actualBundle}
+            canEdit={(r) =>
+              r.repackingStatus !== "Ready to Ship" && !r.actualBundle
+            }
             busyRowId={deletingId}
           />
         )}
@@ -380,47 +584,136 @@ export function BookingScreen() {
             options={pickupViaOptions}
             placeholder="Search pickup partner"
             disabled={fromPickup}
-            onChange={(v) => setForm({ ...form, pickupVia: v, ...(v !== form.pickupVia && { pickupOption: "" }) })}
+            onChange={(v) =>
+              setForm({
+                ...form,
+                pickupVia: v,
+                ...(v !== form.pickupVia && { pickupOption: "" }),
+              })
+            }
           />
           {Boolean(form.pickupOption) && (
-            <div className="cc-panel-desc" style={{ marginTop: -4, marginBottom: 8 }}>
+            <div
+              className="cc-panel-desc"
+              style={{ marginTop: -4, marginBottom: 8 }}
+            >
               Linked pickup: LR {form.pickupOption as string}
             </div>
           )}
           <div className="cc-grid-2">
-            <Field field={{ key: "date", label: "Booking date", type: "date" }} value={form.date} onChange={set} />
-            <Field field={{ key: "billOption", label: "Bill option", type: "select", options: ["With Bill", "Without Bill"] }} value={form.billOption} onChange={set} />
+            <Field
+              field={{ key: "date", label: "Booking date", type: "date" }}
+              value={form.date}
+              onChange={set}
+            />
+            <Field
+              field={{
+                key: "billOption",
+                label: "Bill option",
+                type: "select",
+                options: ["With Bill", "Without Bill"],
+              }}
+              value={form.billOption}
+              onChange={set}
+            />
           </div>
           <div className="cc-grid-2">
-            <Field field={{ key: "bundleCount", label: "Bundle count", type: "number", disabled: fromPickup }} value={form.bundleCount} onChange={set} />
-            <Field field={{ key: "bundleType", label: "Bundle type", type: "select", options: ["Bundle", "Box", "CBM", "KG"] }} value={form.bundleType} onChange={set} />
+            <Field
+              field={{
+                key: "bundleCount",
+                label: "Bundle count",
+                type: "number",
+                disabled: fromPickup,
+              }}
+              value={form.bundleCount}
+              onChange={set}
+            />
+            <Field
+              field={{
+                key: "bundleType",
+                label: "Bundle type",
+                type: "select",
+                options: ["Bundle", "Box", "CBM", "KG"],
+              }}
+              value={form.bundleType}
+              onChange={set}
+            />
           </div>
           <div className="cc-grid-2">
-            <Field field={{ key: "productType", label: "Product type", type: "select", options: ["Branded", "Normal"] }} value={form.productType} onChange={set} />
-            <Field field={{ key: "repackingStatus", label: "Pack status", type: "select", options: ["Ready to Ship", "Repacking Required"], optionLabels: { "Ready to Ship": "Package Ready", "Repacking Required": "Repacking" } }} value={form.repackingStatus} onChange={set} />
+            <Field
+              field={{
+                key: "productType",
+                label: "Product type",
+                type: "select",
+                options: ["Branded", "Normal"],
+              }}
+              value={form.productType}
+              onChange={set}
+            />
+            <Field
+              field={{
+                key: "repackingStatus",
+                label: "Pack status",
+                type: "select",
+                options: ["Ready to Ship", "Repacking Required"],
+                optionLabels: {
+                  "Ready to Ship": "Package Ready",
+                  "Repacking Required": "Repacking",
+                },
+              }}
+              value={form.repackingStatus}
+              onChange={set}
+            />
           </div>
-          {(showBrandHandlingCharge || showPickupCharge || showBundleHandlingCharge) && (
+          {(showBrandHandlingCharge ||
+            showPickupCharge ||
+            showBundleHandlingCharge) && (
             <div className="cc-grid-2">
               {showBrandHandlingCharge && (
                 <Field
-                  field={{ key: "brandHandlingCharge", label: "Brand handling charge", type: "number" }}
+                  field={{
+                    key: "brandHandlingCharge",
+                    label: "Brand handling charge",
+                    type: "number",
+                  }}
                   value={form.brandHandlingCharge}
                   onChange={set}
                 />
               )}
               {showPickupCharge && (
-                <Field field={{ key: "pickupCharge", label: "Pickup charge", type: "number" }} value={form.pickupCharge} onChange={set} />
+                <Field
+                  field={{
+                    key: "pickupCharge",
+                    label: "Pickup charge",
+                    type: "number",
+                  }}
+                  value={form.pickupCharge}
+                  onChange={set}
+                />
               )}
               {showBundleHandlingCharge && (
                 <Field
-                  field={{ key: "bundleHandlingCharge", label: "Bundle handling charge (below 5 bundles)", type: "number" }}
+                  field={{
+                    key: "bundleHandlingCharge",
+                    label: "Bundle handling charge (below 5 bundles)",
+                    type: "number",
+                  }}
                   value={form.bundleHandlingCharge}
                   onChange={set}
                 />
               )}
             </div>
           )}
-          <Field field={{ key: "status", label: "Status", type: "select", options: ["Active", "Inactive"] }} value={form.status} onChange={set} />
+          <Field
+            field={{
+              key: "status",
+              label: "Status",
+              type: "select",
+              options: ["Active", "Inactive"],
+            }}
+            value={form.status}
+            onChange={set}
+          />
           {error && <div className="cc-error">{error}</div>}
         </Modal>
       )}

@@ -11,6 +11,12 @@ import { Field } from "@/components/ui/Field";
 import { ApiError } from "@/utils/apiClient";
 import type { PickupAssign } from "@/types";
 
+// Booking's own "pickup via" choices, which also live in the Pickup partners master — they
+// aren't transports you can assign a collection run to, so Choose transport hides them.
+// Matched loosely (case, spacing, "pick boy" / "pickup boy") since they're typed in by hand.
+const NON_TRANSPORT_PARTNER = /^(direct to store|our pick ?(up)? ?boy)$/;
+const isAssignableTransport = (name: string) => !NON_TRANSPORT_PARTNER.test(name.trim().toLowerCase().replace(/\s+/g, " "));
+
 /** Assign a transport (pickup partner) and LR number to a collection run. */
 export function PickupAssignScreen() {
   const { pickupAssigns, pickupPartners } = useCargoData();
@@ -91,7 +97,7 @@ export function PickupAssignScreen() {
             key: "transport",
             label: "Choose transport",
             type: "select",
-            options: pickupPartners.items.map((p) => p.name),
+            options: pickupPartners.items.map((p) => p.name).filter(isAssignableTransport),
             required: true,
           },
           { key: "lrNo", label: "LR number", required: true },

@@ -251,6 +251,15 @@ export function InvoicingScreen() {
           {booking && (
             <>
               <div style={{ margin: "12px 0" }}>
+                {/* Shown as soon as a booking is picked — not gated on the delivery partner. */}
+                <div className="cc-total-row">
+                  <span>Receiver</span>
+                  <span>{booking.receiver || "—"}</span>
+                </div>
+                <div className="cc-total-row">
+                  <span>Receiver country</span>
+                  <span>{receiver?.country || "—"}</span>
+                </div>
                 <div className="cc-total-row">
                   <span>Route price ({route ? `${route.from} → ${route.to}, per ${route.uom}` : "no route matched"})</span>
                   <span>
@@ -285,14 +294,6 @@ export function InvoicingScreen() {
               )}
               {(existingInvoice || selectedPartner) && (
                 <div style={{ margin: "8px 0" }}>
-                  <div className="cc-total-row">
-                    <span>Receiver</span>
-                    <span>{booking.receiver || "—"}</span>
-                  </div>
-                  <div className="cc-total-row">
-                    <span>Receiver country</span>
-                    <span>{receiver?.country || "—"}</span>
-                  </div>
                   <div className="cc-total-row">
                     <span>Delivery partner charge ({existingInvoice?.deliveryPartner ?? selectedPartner?.name})</span>
                     <span>+{money(deliveryCharge)}</span>
