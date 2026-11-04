@@ -228,10 +228,18 @@ export interface PackingListData {
   bookingDate: string;
   sender: PartyDetails;
   receiver: PartyDetails;
-  bundles: { bundleNo: number; items: { product: string; qty: string }[] }[];
+  bundles: {
+    bundleNo: number;
+    bundleMarkId?: number;
+    netWeight: string;
+    grossWeight: string;
+    items: { product: string; qty: string; unit: string; fabric: string }[];
+  }[];
 }
 
-/** Packing list — each Bundle No spans all of that bundle's product lines. */
+type SpanCell = string | { content: string; rowSpan: number; styles?: { valign: "middle" } };
+
+/** Packing list — each bundle's Sl No, Bundle Mark and weights span all of that bundle's product lines. */
 export async function downloadPackingListPdf(filename: string, data: PackingListData): Promise<void> {
   const d = await newDoc("PACKING LIST");
   let y = infoRow(d, 44, ["LR No.", data.lrNo, "Booking Date", data.bookingDate]);
@@ -240,35 +248,41 @@ export async function downloadPackingListPdf(filename: string, data: PackingList
   d.doc.setFont("times", "bold");
   d.doc.setFontSize(13);
   d.doc.text("Description", MARGIN, y + 11);
-  const body: (string | { content: string; rowSpan: number; styles?: { valign: "middle" } })[][] = [];
+  const body: SpanCell[][] = [];
   let totalQty = 0;
-  for (const b of data.bundles) {
-    const items = b.items.length ? b.items : [{ product: "", qty: "" }];
+  let totalNet = 0;
+  let totalGross = 0;
+  data.bundles.forEach((b, index) => {
+    const items = b.items.length ? b.items : [{ product: "", qty: "", unit: "", fabric: "" }];
+    totalNet += Number(b.netWeight) || 0;
+    totalGross += Number(b.grossWeight) || 0;
+    const span = (content: string): SpanCell => ({ content, rowSpan: items.length, styles: { valign: "middle" } });
     items.forEach((item, i) => {
       totalQty += Number(item.qty) || 0;
-      const row: (string | { content: string; rowSpan: number; styles?: { valign: "middle" } })[] = [];
-      if (i === 0) row.push({ content: String(b.bundleNo), rowSpan: items.length, styles: { valign: "middle" } });
-      row.push(item.product, item.qty);
+      const row: SpanCell[] = [];
+      if (i === 0) row.push(span(String(index + 1)), span(b.bundleMarkId ? String(b.bundleMarkId) : "-"));
+      row.push(item.product || "-", item.qty || "-", item.unit || "-", item.fabric || "-");
+      if (i === 0) row.push(span(b.netWeight || "-"), span(b.grossWeight || "-"));
       body.push(row);
     });
-  }
+  });
   d.autoTable(d.doc, {
     startY: y + 13,
     theme: "grid",
-    styles: baseStyles,
-    head: [["Bundle No", "Products", "Product Qty"]],
+    styles: { ...baseStyles, fontSize: 10 },
+    head: [["Sl No", "Bundle Mark", "Product Name", "Quantity", "Unit", "Fabric", "N.Wt", "Gr.Wt"]],
     headStyles,
     body,
-    foot: [[{ content: "Total Qty", colSpan: 2 }, String(totalQty || "")]],
+    foot: [[{ content: "Total", colSpan: 3 }, String(totalQty || ""), "", "", String(totalNet || ""), String(totalGross || "")]],
     footStyles: headStyles,
     showFoot: "lastPage",
-    columnStyles: { 0: { cellWidth: 30 }, 2: { cellWidth: 32 } },
+    columnStyles: { 0: { cellWidth: 14 }, 1: { cellWidth: 22 }, 3: { cellWidth: 21 }, 4: { cellWidth: 20 }, 6: { cellWidth: 16 }, 7: { cellWidth: 16 } },
     margin: { left: MARGIN, right: MARGIN },
   });
   const end = (d.doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
   d.doc.setFont("times", "italic");
   d.doc.setFontSize(9.5);
-  d.doc.text("Note: Each Bundle No covers all product lines listed beside it; add more rows under the same bundle for additional products.", MARGIN, end + 5);
+  d.doc.text("Note: Each bundle's Sl No, Bundle Mark and weights cover all product lines listed beside it.", MARGIN, end + 5);
   d.doc.save(filename);
 }
 

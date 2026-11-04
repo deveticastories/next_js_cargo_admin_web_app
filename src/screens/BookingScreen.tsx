@@ -180,7 +180,7 @@ export function BookingScreen() {
   };
   const openEdit = (row: Booking) => {
     // Bookings saved with a partner remember it; the rest came via our pickup boy.
-    setForm({ ...row, date: toDateInputValue(row.date), pickupVia: row.pickupPartner || PICKUP_VIA_OPTIONS[0] });
+    setForm({ ...row, date: toDateInputValue(row.date), pickupVia: row.pickupPartner || (row.pickupVia === "Direct to Store" ? "Direct to Store" : PICKUP_VIA_OPTIONS[0]) });
     setModalRow(row.id);
     setFromPickup(false);
     setError("");
@@ -191,20 +191,14 @@ export function BookingScreen() {
       setError("Sender, receiver, pick up via and bundle count are required.");
       return;
     }
-    if (form.pickupVia === "Direct to Store") {
-      // cargo-backend has no way to store this yet — `pickupOption` must reference a Pickup Assign.
-      setError("Direct to Store bookings can't be saved yet — the backend still requires a pickup assign.");
-      return;
-    }
+    const directToStore = form.pickupVia === "Direct to Store";
     // Any partner, not just active ones — an edited booking may still point at a since-deactivated one.
     const partner = pickupPartners.items.some((p) => p.name === form.pickupVia) ? (form.pickupVia as string) : null;
-    // Editing keeps the booking's existing assign unless "Pick up via" was changed (which clears it).
-    // A partner without any assign yet is saved against the partner alone.
-    const pickupOption = (form.pickupOption as string) || latestPickupAssign(partner)?.lrNo || "";
-    if (!pickupOption && !partner) {
-      setError("No pickup assign exists yet — create one on the Pickup assign screen first.");
-      return;
-    }
+    // Direct to Store never links an assign. Otherwise editing keeps the booking's existing assign unless
+    // "Pick up via" was changed (which clears it), and a new booking links the newest one if any exists —
+    // with none, Our Pickup Boy saves unlinked and a partner saves against the partner alone.
+    const pickupOption = directToStore ? "" : (form.pickupOption as string) || latestPickupAssign(partner)?.lrNo || "";
+    const pickupVia: Booking["pickupVia"] = directToStore ? "Direct to Store" : partner ? "Pickup Partner" : "Our Pickup Boy";
     // Each extra charge only applies under its own condition — zero it out
     // here (regardless of what's still sitting in the hidden field) so a
     // charge typed in while its condition held can never be saved once the
@@ -214,6 +208,7 @@ export function BookingScreen() {
       ...form,
       pickupOption,
       pickupPartner: partner ?? "",
+      pickupVia,
       brandHandlingCharge: form.productType === "Branded" ? Number(form.brandHandlingCharge) || 0 : 0,
       pickupCharge: form.billOption === "Without Bill" ? Number(form.pickupCharge) || 0 : 0,
       bundleHandlingCharge: Number(form.bundleCount) < 5 ? Number(form.bundleHandlingCharge) || 0 : 0,

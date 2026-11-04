@@ -88,6 +88,11 @@ export interface Fabric extends BaseRecord {
   name: string;
 }
 
+/** A unit of measure picked on packing-list product lines. */
+export interface Unit extends BaseRecord {
+  name: string;
+}
+
 export interface DeliveryPartner extends BaseRecord {
   name: string;
   whatsapp: string;
@@ -129,6 +134,8 @@ export interface Booking extends BaseRecord {
   pickupOption: string;
   /** Pickup Partner name, set when "Pick up via" was a partner — "" otherwise. */
   pickupPartner: string;
+  /** How the goods reach the store — only "Pickup Partner" bookings need a partner/assign. */
+  pickupVia: "Our Pickup Boy" | "Direct to Store" | "Pickup Partner";
   date: string;
   billOption: BillOption | "";
   bundleCount: number;
@@ -268,6 +275,7 @@ export interface BundleLineItem {
   grossWeight: string;
   product: string;
   qty: string;
+  unit: string;
   fabric: string;
   description: string;
 }

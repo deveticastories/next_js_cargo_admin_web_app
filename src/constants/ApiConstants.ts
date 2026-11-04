@@ -40,6 +40,7 @@ export const API_ENDPOINTS = {
     BY_ID: (id: string) => `/pricing/${id}`,
   },
   FABRICS: crudEndpoints("/fabrics"),
+  UNITS: crudEndpoints("/units"),
   PRODUCTS: crudEndpoints("/products"),
   PICKUP_ASSIGNS: {
     ...crudEndpoints("/pickup-assigns"),

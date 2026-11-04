@@ -23,6 +23,7 @@ import type {
   DeliveryPartner,
   Employee,
   Fabric,
+  Unit,
   Invoice,
   PickupAssign,
   PickupPartner,
@@ -45,6 +46,7 @@ import { StoreServices } from "@/services/StoreServices";
 import { CountryServices } from "@/services/CountryServices";
 import { ProductServices } from "@/services/ProductServices";
 import { FabricServices } from "@/services/FabricServices";
+import { UnitServices } from "@/services/UnitServices";
 import { DeliveryPartnerServices } from "@/services/DeliveryPartnerServices";
 import { PickupPartnerServices } from "@/services/PickupPartnerServices";
 import { PricingServices } from "@/services/PricingServices";
@@ -68,6 +70,7 @@ export interface CargoData {
   countries: ApiCollection<Country>;
   products: ApiCollection<Product>;
   fabrics: ApiCollection<Fabric>;
+  units: ApiCollection<Unit>;
   deliveryPartners: ApiCollection<DeliveryPartner>;
   pickupPartners: ApiCollection<PickupPartner>;
   pricing: ApiCollection<PricingRoute>;
@@ -95,6 +98,7 @@ const STORES: { [K in keyof CargoData]: CollectionStore<ItemOf<CargoData[K]>> } 
   countries: createCollectionStore(CountryServices, { persistKey: "countries" }),
   products: createCollectionStore(ProductServices, { persistKey: "products" }),
   fabrics: createCollectionStore(FabricServices, { persistKey: "fabrics" }),
+  units: createCollectionStore(UnitServices, { persistKey: "units" }),
   deliveryPartners: createCollectionStore(DeliveryPartnerServices, { persistKey: "deliveryPartners" }),
   pickupPartners: createCollectionStore(PickupPartnerServices, { persistKey: "pickupPartners" }),
   pricing: createCollectionStore(PricingServices, { persistKey: "pricing" }),

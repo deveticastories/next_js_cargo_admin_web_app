@@ -22,7 +22,7 @@ import { fmtDate, todayISO } from "@/utils/format";
 import { downloadTablePdf } from "@/utils/pdf";
 
 export function ReadyToStuffScreen() {
-  const { bookings, products, fabrics } = useCargoData();
+  const { bookings, products, units, fabrics } = useCargoData();
   const router = useRouter();
   const [selected, setSelected] = useState<string[]>([]);
   const [moving, setMoving] = useState(false);
@@ -87,6 +87,19 @@ export function ReadyToStuffScreen() {
       !b.sentToStuffing &&
       (packedByBooking.get(b.id)?.size ?? 0) >= Math.max(1, b.actualBundle || b.bundleCount || 1)
   );
+  // Distinct units used across a booking's saved packing-list lines, in first-seen order.
+  const unitsOf = (bookingId: string) => [
+    ...new Set(
+      (bundlesByBooking.get(bookingId) ?? []).flatMap(({ bundle }) => bundle.products.map((p) => nameOf(p.unit, units.items)).filter(Boolean))
+    ),
+  ];
+  // Net / gross weight (kg) summed over a booking's saved bundles.
+  const weightsOf = (bookingId: string) =>
+    (bundlesByBooking.get(bookingId) ?? []).reduce(
+      (sum, { bundle }) => ({ net: sum.net + Number(bundle.netWeight || 0), gross: sum.gross + Number(bundle.grossWeight || 0) }),
+      { net: 0, gross: 0 }
+    );
+  const kg = (n: number | string | undefined) => `${Number(n || 0)} kg`;
   const totalBundles = rows.reduce((sum, b) => sum + (b.actualBundle || b.bundleCount), 0);
   // Ignore any selected id that has since dropped off the list.
   const selectedIds = selected.filter((id) => rows.some((b) => b.id === id));
@@ -100,13 +113,14 @@ export function ReadyToStuffScreen() {
     if (!picked.length) return;
     setDownloading(true);
     try {
+      const weights = picked.map((b) => weightsOf(b.id));
       await downloadTablePdf(`ready-to-stuff-${todayISO()}.pdf`, {
         title: "READY TO STUFF LIST",
         info: [
           ["Generated On", fmtDate(todayISO())],
           ["No. of Bookings", String(picked.length)],
         ],
-        head: ["Sl No", "Booking ID", "Sender", "Receiver", "Bundles", "Bundle Mark IDs", "Date", "Package List", "Status"],
+        head: ["Sl No", "Booking ID", "Sender", "Receiver", "Bundles", "Bundle Mark IDs", "Units", "Net Wt (kg)", "Gross Wt (kg)", "Date", "Package List", "Status"],
         body: picked.map((b, i) => [
           String(i + 1),
           b.code,
@@ -114,11 +128,27 @@ export function ReadyToStuffScreen() {
           b.receiver,
           String(b.actualBundle || b.bundleCount),
           markIdsByBooking.get(b.id)?.join(", ") || "-",
+          unitsOf(b.id).join(", ") || "-",
+          kg(weights[i].net),
+          kg(weights[i].gross),
           fmtDate(b.date),
           "Added",
           "Pending",
         ]),
-        foot: ["", "Total", "", "", String(picked.reduce((sum, b) => sum + (b.actualBundle || b.bundleCount), 0)), "", "", "", ""],
+        foot: [
+          "",
+          "Total",
+          "",
+          "",
+          String(picked.reduce((sum, b) => sum + (b.actualBundle || b.bundleCount), 0)),
+          "",
+          "",
+          kg(weights.reduce((sum, w) => sum + w.net, 0)),
+          kg(weights.reduce((sum, w) => sum + w.gross, 0)),
+          "",
+          "",
+          "",
+        ],
       });
     } catch {
       alert("Failed to generate the PDF.");
@@ -161,9 +191,10 @@ export function ReadyToStuffScreen() {
               line ? nameOf(line.product, products.items) || "-" : "-",
               line ? nameOf(line.fabric, fabrics.items) || "-" : "-",
               line ? String(line.quantity ?? "-") : "-",
+              line ? nameOf(line.unit, units.items) || "-" : "-",
               line?.description || "-",
-              first ? String(bundle.netWeight ?? 0) : "",
-              first ? String(bundle.grossWeight ?? 0) : "",
+              first ? kg(bundle.netWeight) : "",
+              first ? kg(bundle.grossWeight) : "",
             ]);
           });
         }
@@ -175,10 +206,12 @@ export function ReadyToStuffScreen() {
           ["No. of Bookings", String(picked.length)],
           ["No. of Bundles", String(bundleCount)],
           ["Total Qty", String(totalQty)],
+          ["Total Net Wt", kg(totalNet)],
+          ["Total Gross Wt", kg(totalGross)],
         ],
-        head: ["Sl No", "Bundle Mark ID", "Booking ID", "Sender", "Receiver", "Bundle No", "Product", "Fabric", "Qty", "Description", "Net Wt (kg)", "Gross Wt (kg)"],
+        head: ["Sl No", "Bundle Mark ID", "Booking ID", "Sender", "Receiver", "Bundle No", "Product", "Fabric", "Qty", "Unit", "Description", "Net Wt (kg)", "Gross Wt (kg)"],
         body,
-        foot: ["", "", "Total", "", "", String(bundleCount), "", "", String(totalQty), "", String(totalNet), String(totalGross)],
+        foot: ["", "", "Total", "", "", String(bundleCount), "", "", String(totalQty), "", "", kg(totalNet), kg(totalGross)],
       });
     } catch {
       alert("Failed to generate the container packing list PDF.");
@@ -255,7 +288,7 @@ export function ReadyToStuffScreen() {
       </div>
       {error && <div className="cc-alert-error" style={{ margin: "0 18px 12px" }}>{error}</div>}
       {bookings.loading || loadingPacked ? (
-        <SkeletonTable columns={9} />
+        <SkeletonTable columns={10} />
       ) : (
         <DataTable
           emptyText="No bookings are packed and ready to be stuffed."
@@ -274,6 +307,7 @@ export function ReadyToStuffScreen() {
               label: "Bundle mark IDs",
               render: (r) => markIdsByBooking.get(r.id)?.join(", ") || "—",
             },
+            { key: "units", label: "Units", render: (r) => unitsOf(r.id).join(", ") || "—" },
             { key: "date", label: "Date", render: (r) => fmtDate(r.date) },
             { key: "packageListStatus", label: "Package list status", render: () => <Badge value="Added" /> },
             { key: "status", label: "Status", render: () => <Badge value="Pending" /> },

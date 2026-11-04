@@ -58,6 +58,7 @@ const SAVED_ITEM_COLUMNS: { key: keyof SavedItemRow; label: string }[] = [
   { key: "bundleMarkId", label: "Bundle mark ID" },
   { key: "product", label: "Product name" },
   { key: "qty", label: "Qty" },
+  { key: "unit", label: "Unit" },
   { key: "fabric", label: "Fabric" },
   { key: "netWeight", label: "Net wt (kg)" },
   { key: "grossWeight", label: "Gross wt (kg)" },
@@ -74,7 +75,7 @@ const REPACK_ITEM_COLUMNS: { key: keyof SavedItemRow; label: string }[] = [
 ];
 
 function emptyLine(): BundleLineItem {
-  return { netWeight: "", grossWeight: "", product: "", qty: "", fabric: "", description: "" };
+  return { netWeight: "", grossWeight: "", product: "", qty: "", unit: "", fabric: "", description: "" };
 }
 
 const LINE_COLUMNS: { key: keyof BundleLineItem; label: string }[] = [
@@ -82,6 +83,7 @@ const LINE_COLUMNS: { key: keyof BundleLineItem; label: string }[] = [
   { key: "grossWeight", label: "Gross wt (kg)" },
   { key: "product", label: "Product name" },
   { key: "qty", label: "Qty" },
+  { key: "unit", label: "Unit" },
   { key: "fabric", label: "Fabric" },
   { key: "description", label: "Description" },
 ];
@@ -108,12 +110,13 @@ export interface BundleWorkspaceProps {
 const bookingLabel = (b?: Booking) => (b ? `${b.code} — ${b.sender} → ${b.receiver}` : "");
 
 export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
-  const { senders, receivers, products, fabrics } = useCargoData();
+  const { senders, receivers, products, units, fabrics } = useCargoData();
   const router = useRouter();
-  // Product / Fabric pick from their master lists; the search's "Add new" row deep-links into
-  // that master screen's "add new" form, prefilled with whatever was typed.
+  // Product / Unit / Fabric pick from their master lists; the search's "Add new" row deep-links into
+  // that master screen's "add new" form, prefilled with whatever was typed. Inactive units aren't offered.
   const LINE_MASTERS: Partial<Record<keyof BundleLineItem, { options: string[]; href: string; createLabel: string }>> = {
     product: { options: products.items.map((p) => p.name), href: "/admin/products", createLabel: "Add new product" },
+    unit: { options: units.items.filter((u) => u.status !== "Inactive").map((u) => u.name), href: "/admin/units", createLabel: "Add new unit" },
     fabric: { options: fabrics.items.map((f) => f.name), href: "/admin/fabrics", createLabel: "Add new fabric" },
   };
   const addMasterFromSearch = (href: string, typedName: string) => {
@@ -209,7 +212,7 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
         if (!forBooking) continue;
         if (!readySaved.has(forBooking.code)) readySaved.set(forBooking.code, new Set());
         for (const bundle of pkg.bundles) readySaved.get(forBooking.code)!.add(bundle.bundleNo);
-        flattenPackage(pkg, { products: products.items, fabrics: fabrics.items }, markIds).forEach((row, index) => {
+        flattenPackage(pkg, { products: products.items, units: units.items, fabrics: fabrics.items }, markIds).forEach((row, index) => {
           rows.push({ id: `${pkg._id}-${index}`, bookingCode: forBooking.code, ...row });
         });
       }
@@ -250,6 +253,7 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
               grossWeight: String(match.grossWeight ?? ""),
               product: nameOf(p.product, products.items),
               qty: String(p.quantity ?? ""),
+              unit: nameOf(p.unit, units.items),
               fabric: nameOf(p.fabric, fabrics.items),
               description: p.description ?? "",
             }))
@@ -342,7 +346,7 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
   };
 
   const updateLine = (index: number, key: keyof BundleLineItem, rawVal: string) => {
-    // Product / Fabric come from their master lists as-is — only typed input is filtered.
+    // Product / Unit / Fabric come from their master lists as-is — only typed input is filtered.
     const val = LINE_MASTERS[key] ? rawVal : sanitizeLineValue(key, rawVal);
     setLines(lines.map((l, i) => (i === index ? { ...l, [key]: val } : l)));
     setSavedMessage("");
@@ -356,10 +360,14 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
     setSavedMessage("");
   };
 
-  // cargo-backend requires a real Product on every product line it stores — a line with any
-  // other field filled in (qty, fabric, description) but no product picked can't be saved.
-  const hasLineWithoutProduct = (bundleLines: BundleLineItem[]) =>
-    bundleLines.some((l) => (l.product || l.qty || l.fabric || l.description) && !l.product);
+  // cargo-backend requires a real Product and Unit on every product line it stores — a line with any
+  // other field filled in (qty, fabric, description) but no product or unit picked can't be saved.
+  const lineError = (bundleLines: BundleLineItem[]) => {
+    const filled = bundleLines.filter((l) => l.product || l.qty || l.unit || l.fabric || l.description);
+    if (filled.some((l) => !l.product)) return "Each item needs a product selected.";
+    if (filled.some((l) => !l.unit)) return "Each item needs a unit selected.";
+    return "";
+  };
 
   /**
    * Upserts one bundle into the booking's Package (creating it on the first bundle ever saved),
@@ -368,10 +376,11 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
    */
   const saveBundle = async (bundleNumber: number, bundleLines: BundleLineItem[], opts: { repackedBy?: string } = {}) => {
     const bundleProducts = bundleLines
-      .filter((l) => l.product || l.qty || l.fabric || l.description)
+      .filter((l) => l.product || l.qty || l.unit || l.fabric || l.description)
       .map((l) => ({
         productId: products.items.find((p) => p.name === l.product)?.id ?? "",
         quantity: Number(l.qty) || 1,
+        unitId: units.items.find((u) => u.name === l.unit)?.id ?? "",
         fabricId: fabrics.items.find((f) => f.name === l.fabric)?.id,
         description: l.description || undefined,
       }));
@@ -407,9 +416,10 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
    */
   const saveItems = async () => {
     if (mode === "repack") {
-      if (hasLineWithoutProduct(lines)) {
+      const invalid = lineError(lines);
+      if (invalid) {
         setSavedMessage("");
-        setError("Each item needs a product selected.");
+        setError(invalid);
         return;
       }
       const bundleNumber = Number(bundle);
@@ -445,15 +455,16 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
       setBundle(nextBundle);
       return;
     }
-    const filledCount = lines.filter((l) => l.product || l.qty || l.fabric || l.description).length;
+    const filledCount = lines.filter((l) => l.product || l.qty || l.unit || l.fabric || l.description).length;
     if (filledCount === 0) {
       setSavedMessage("");
       setError("Add at least one item to the packing list before saving.");
       return;
     }
-    if (hasLineWithoutProduct(lines)) {
+    const invalid = lineError(lines);
+    if (invalid) {
       setSavedMessage("");
-      setError("Each item needs a product selected.");
+      setError(invalid);
       return;
     }
     setSaving(true);
@@ -467,7 +478,7 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
       // Add this bundle's items to "Added items" (replacing any earlier Save of the same bundle).
       const bundleNumber = Number(bundle);
       const newRows: SavedItemRow[] = lines
-        .filter((l) => l.product || l.qty || l.fabric || l.description)
+        .filter((l) => l.product || l.qty || l.unit || l.fabric || l.description)
         .map((l, index) => ({ id: `${bookingId}-${bundleNumber}-${index}`, bookingCode: booking?.code ?? bookingId, bundleNumber, bundleMarkId: saved.bundleMarkId, ...l }));
       setAddedItems((prev) => [...prev.filter((r) => r.bundleNumber !== bundleNumber), ...newRows].sort((x, y) => x.bundleNumber - y.bundleNumber));
       setMarkIdPopup({ bundleNumber, bundleMarkId: saved.bundleMarkId, items: lines });
@@ -532,16 +543,16 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
     }
   };
 
-  /** "Download packing list" on both screens — the Added bundles (repack) / Added items (ready) rows as a PDF, grouped by bundle. */
+  /** "Download packing list" on both screens — the Added bundles (repack) / Added items (ready) rows as a PDF, one row-spanned block per bundle. */
   const downloadPackingListAsPdf = async () => {
     // Repack mode prints its staged bundles; ready mode prints the "Added items" rows grouped by bundle.
     const source =
       mode === "repack"
         ? stagedBundles
-        : [...new Set(addedItems.map((r) => r.bundleNumber))].map((n) => ({
-            bundleNumber: n,
-            items: addedItems.filter((r) => r.bundleNumber === n),
-          }));
+        : [...new Set(addedItems.map((r) => r.bundleNumber))].map((n) => {
+            const items = addedItems.filter((r) => r.bundleNumber === n);
+            return { bundleNumber: n, bundleMarkId: items[0]?.bundleMarkId, items };
+          });
     if (!booking || source.length === 0) return;
     const partyOf = (name: string, kind: "sender" | "receiver") => {
       const found = (kind === "sender" ? senders.items : receivers.items).find((p) => p.name === name);
@@ -558,9 +569,13 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
           .sort((a, b) => a.bundleNumber - b.bundleNumber)
           .map((b) => ({
             bundleNo: b.bundleNumber,
+            bundleMarkId: b.bundleMarkId,
+            // Weights are entered once per bundle, on its first line.
+            netWeight: b.items[0]?.netWeight ?? "",
+            grossWeight: b.items[0]?.grossWeight ?? "",
             items: b.items
-              .filter((i) => i.product || i.qty || i.fabric || i.description)
-              .map((i) => ({ product: [i.product, i.fabric].filter(Boolean).join(" - "), qty: i.qty })),
+              .filter((i) => i.product || i.qty || i.unit || i.fabric || i.description)
+              .map((i) => ({ product: i.product, qty: i.qty, unit: i.unit, fabric: i.fabric })),
           })),
       });
     } catch {
@@ -625,7 +640,7 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
   const stagedRows: SavedItemRow[] = stagedBundles
     .flatMap((b) =>
       b.items
-        .filter((item) => item.product || item.qty || item.fabric || item.description)
+        .filter((item) => item.product || item.qty || item.unit || item.fabric || item.description)
         .map((item, index) => ({
           id: `staged-${b.bundleNumber}-${index}`,
           bookingCode: booking?.code ?? bookingId,
@@ -928,17 +943,19 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
                     <th>Product</th>
                     <th>Fabric</th>
                     <th>Qty</th>
+                    <th>Unit</th>
                     <th>Description</th>
                   </tr>
                 </thead>
                 <tbody>
                   {markIdPopup.items
-                    .filter((i) => i.product || i.qty || i.fabric || i.description)
+                    .filter((i) => i.product || i.qty || i.unit || i.fabric || i.description)
                     .map((i, index) => (
                       <tr key={index}>
                         <td>{i.product || "—"}</td>
                         <td>{i.fabric || "—"}</td>
                         <td>{i.qty || 1}</td>
+                        <td>{i.unit || "—"}</td>
                         <td>{i.description || "—"}</td>
                       </tr>
                     ))}

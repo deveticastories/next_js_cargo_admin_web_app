@@ -4,7 +4,8 @@
  * an existing `/pickup-assigns` record, picked by LR No, and `pickupPartner` a
  * ref to a `/pickup-partners` record, picked by name — the same way
  * Sender/Receiver are picked by name (store the display field, resolve to id
- * on write). The backend requires at least one of the two on create.
+ * on write). `pickupVia` says how the goods arrive; the backend only requires
+ * one of the two refs when it's "Pickup Partner".
  *
  * The backend tracks two things the old local-only store modeled as plain
  * booleans: `packingStatus` ("Ready to Ship" | "Repacking Required", renamed
@@ -46,6 +47,7 @@ function toFrontend(doc: BackendDoc, submitted?: Record<string, unknown>): Booki
     receiver: refName(doc.receiver, submitted?.receiver),
     pickupOption: pickupLrNo(doc.pickupOption, submitted),
     pickupPartner: refName(doc.pickupPartner, submitted?.pickupPartner),
+    pickupVia: (doc.pickupVia as Booking["pickupVia"]) ?? (submitted?.pickupVia as Booking["pickupVia"]) ?? "Our Pickup Boy",
     date: String(doc.date ?? submitted?.date ?? ""),
     billOption: (doc.billOption as Booking["billOption"]) ?? "",
     bundleCount: Number(doc.bundleCount ?? 0),
@@ -70,6 +72,7 @@ async function toBackend(body: Record<string, unknown>) {
     bundleType: body.bundleType || undefined,
     productType: body.productType || undefined,
     packingStatus: body.repackingStatus || undefined,
+    pickupVia: body.pickupVia || undefined,
     brandHandlingCharge: body.brandHandlingCharge !== undefined ? Number(body.brandHandlingCharge) || 0 : undefined,
     pickupCharge: body.pickupCharge !== undefined ? Number(body.pickupCharge) || 0 : undefined,
     bundleHandlingCharge: body.bundleHandlingCharge !== undefined ? Number(body.bundleHandlingCharge) || 0 : undefined,

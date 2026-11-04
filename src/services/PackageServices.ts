@@ -30,6 +30,7 @@ export interface PackageProductDoc {
   _id?: string;
   product: string | RefOrId;
   quantity: number;
+  unit?: string | RefOrId;
   fabric?: string | RefOrId;
   description?: string;
 }
@@ -60,7 +61,7 @@ export function packageBookingId(pkg: PackageDoc): string {
   return idOf(pkg.booking) ?? "";
 }
 
-/** Name for a populated-or-bare-id product/fabric ref, looked up in an already-loaded master list. */
+/** Name for a populated-or-bare-id product/unit/fabric ref, looked up in an already-loaded master list. */
 export function nameOf(ref: string | RefOrId | undefined, list: { id: string; name: string }[]): string {
   if (!ref) return "";
   if (typeof ref === "object" && ref.name) return ref.name;
@@ -86,6 +87,7 @@ export async function getPackageByBooking(bookingId: string): Promise<PackageDoc
 export interface BundleProductInput {
   productId: string;
   quantity: number;
+  unitId: string;
   fabricId?: string;
   description?: string;
 }
@@ -116,6 +118,7 @@ export async function upsertBundle(
     products: bundle.products.map((p) => ({
       product: p.productId,
       quantity: p.quantity,
+      unit: p.unitId,
       fabric: p.fabricId || undefined,
       description: p.description || undefined,
     })),
@@ -135,7 +138,7 @@ export async function upsertBundle(
     bundleNo: b.bundleNo,
     netWeight: b.netWeight,
     grossWeight: b.grossWeight,
-    products: b.products.map((p) => ({ product: idOf(p.product), quantity: p.quantity, fabric: idOf(p.fabric), description: p.description })),
+    products: b.products.map((p) => ({ product: idOf(p.product), quantity: p.quantity, unit: idOf(p.unit), fabric: idOf(p.fabric), description: p.description })),
   }));
   const idx = bundles.findIndex((b) => b.bundleNo === bundle.bundleNumber);
   if (idx >= 0) bundles[idx] = { ...newBundle, _id: bundles[idx]._id };
@@ -167,7 +170,8 @@ export interface PackageItemRow extends BundleLineItem {
 
 export function flattenPackage(
   pkg: PackageDoc,
-  masters: { products: { id: string; name: string }[]; fabrics: { id: string; name: string }[] },
+  // `units` is optional — the backend populates `unit` on every read, so its name is usually already there.
+  masters: { products: { id: string; name: string }[]; units?: { id: string; name: string }[]; fabrics: { id: string; name: string }[] },
   markIds?: Map<string, number>
 ): PackageItemRow[] {
   const rows: PackageItemRow[] = [];
@@ -181,6 +185,7 @@ export function flattenPackage(
         grossWeight: String(bundle.grossWeight ?? ""),
         product: nameOf(product.product, masters.products),
         qty: String(product.quantity ?? ""),
+        unit: nameOf(product.unit, masters.units ?? []),
         fabric: nameOf(product.fabric, masters.fabrics),
         description: product.description ?? "",
       });
