@@ -40,6 +40,8 @@ export interface MasterViewProps<T extends RecordWithId> {
   initialNewValues?: Record<string, unknown>;
   /** Return false to hide a row's delete button. */
   canDelete?: (row: T) => boolean;
+  /** Hides a row's edit button when it returns false. */
+  canEdit?: (row: T) => boolean;
   /** Disable a field in the edit form, given the row as currently saved (undefined when adding). */
   isFieldDisabled?: (fieldKey: string, savedRow: T | undefined) => boolean;
   /** Asks "Are you sure?" before the table's Active/Inactive badge click actually flips the status. Off by default — most screens' status toggle is low-stakes enough not to need it. */
@@ -65,6 +67,7 @@ export function MasterView<T extends RecordWithId>({
   autoOpenNew = false,
   initialNewValues,
   canDelete,
+  canEdit,
   isFieldDisabled,
   confirmStatusToggle = false,
   statusOf = (row) => (row as { status?: string }).status,
@@ -209,7 +212,7 @@ export function MasterView<T extends RecordWithId>({
       {loading ? (
         <SkeletonTable columns={allColumns.length + 1} />
       ) : (
-        <DataTable columns={allColumns} rows={filtered} onEdit={openEdit} onDelete={handleDelete} canDelete={canDelete} busyRowId={busyRowId} />
+        <DataTable columns={allColumns} rows={filtered} onEdit={openEdit} onDelete={handleDelete} canDelete={canDelete} canEdit={canEdit} busyRowId={busyRowId} />
       )}
       {footer?.(rows)}
       {modalRow && (

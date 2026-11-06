@@ -179,6 +179,8 @@ export function PickupAssignScreen() {
         collection={pickupAssigns}
         initialNewValues={{ paymentStatus: "Unpaid", pickupStatus: "Pending" }}
         canDelete={(r) => !isStarted(r)}
+        // Once every bundle is collected the run is closed — no more edits from the form.
+        canEdit={(r) => !isFullyCollected(r)}
         // Paid is final — the edit form can't flip it back to Unpaid either.
         isFieldDisabled={(key, saved) => key === "paymentStatus" && saved?.paymentStatus === "Paid"}
         confirmStatusToggle
