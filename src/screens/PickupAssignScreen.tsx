@@ -15,6 +15,10 @@ import type { PickupAssign } from "@/types";
 // aren't transports you can assign a collection run to, so Choose transport hides them.
 // Matched loosely (case, spacing, "pick boy" / "pickup boy") since they're typed in by hand.
 const NON_TRANSPORT_PARTNER = /^(direct to store|our pick ?(up)? ?boy)$/;
+/** The pickup status cargo-backend derives from a collected count. */
+const pickupStatusFor = (collected: number, assigned: number) =>
+  collected <= 0 ? "Pending" : collected >= assigned ? "Collected" : "Partially Collected";
+
 const isAssignableTransport = (name: string) => !NON_TRANSPORT_PARTNER.test(name.trim().toLowerCase().replace(/\s+/g, " "));
 
 /** Assign a transport (pickup partner) and LR number to a collection run. */
@@ -37,15 +41,20 @@ export function PickupAssignScreen() {
   // Set when a Paid badge is clicked — Paid is final, so this just explains why nothing happens.
   const [paidLockedRow, setPaidLockedRow] = useState<PickupAssign | null>(null);
 
+  // Some bundles recorded — cargo-backend saves "Partially Collected" when fewer than assigned
+  // were collected, "Collected" when all were (same rule as the mobile app).
+  const isStarted = (row: PickupAssign) => row.pickupStatus === "Collected" || row.pickupStatus === "Partially Collected";
   // All assigned bundles collected (e.g. Bundles 2, Collected 2) — the count is final.
   const isFullyCollected = (row: PickupAssign) =>
-    row.pickupStatus === "Collected" && Number(row.collectedBundle || 0) >= Number(row.bundleCount || 0);
+    isStarted(row) && Number(row.collectedBundle || 0) >= Number(row.bundleCount || 0);
+  const balanceOf = (row: PickupAssign) =>
+    Math.max(0, Number(row.bundleCount || 0) - (isStarted(row) ? Number(row.collectedBundle || 0) : 0));
 
   const openCollect = (row: PickupAssign) => {
     if (isFullyCollected(row)) return;
     setCollectRow(row);
     // Editing an already-collected row starts from its saved count.
-    setCollectedBundleInput(row.pickupStatus === "Collected" && row.collectedBundle ? String(row.collectedBundle) : "");
+    setCollectedBundleInput(isStarted(row) && row.collectedBundle ? String(row.collectedBundle) : "");
     setCollectError("");
   };
 
@@ -62,7 +71,7 @@ export function PickupAssignScreen() {
     setCollecting(true);
     try {
       await pickupAssigns.update(collectRow.id, {
-        pickupStatus: "Collected",
+        pickupStatus: pickupStatusFor(Number(collectedBundleInput), Number(collectRow.bundleCount || 0)),
         collectedBundle: Number(collectedBundleInput),
       });
       setCollectRow(null);
@@ -136,12 +145,13 @@ export function PickupAssignScreen() {
           {
             key: "pickupStatus",
             label: "Pickup status",
+            // From the counts, so an older record saved as "Collected" with bundles still due reads as partial.
             render: (r) =>
-              r.pickupStatus === "Collected" ? (
-                <Badge value={r.pickupStatus} />
+              isFullyCollected(r) ? (
+                <Badge value="Collected" />
               ) : (
                 <span onClick={() => openCollect(r)} style={{ cursor: "pointer" }} title="Click to record collected bundles">
-                  <Badge value={r.pickupStatus} />
+                  <Badge value={isStarted(r) ? "Partially Collected" : "Pending"} />
                 </span>
               ),
           },
@@ -151,7 +161,7 @@ export function PickupAssignScreen() {
             render: (r) =>
               isFullyCollected(r) ? (
                 <span title="All bundles collected — can't be changed">{r.collectedBundle || 0}</span>
-              ) : r.pickupStatus === "Collected" ? (
+              ) : isStarted(r) ? (
                 <span
                   onClick={() => openCollect(r)}
                   style={{ cursor: "pointer", color: "var(--accent)", fontWeight: 600, textDecoration: "underline dotted" }}
@@ -160,19 +170,15 @@ export function PickupAssignScreen() {
                   {r.collectedBundle || 0}
                 </span>
               ) : (
-                "—"
+                0
               ),
           },
-          // Bundles assigned but not collected — only known once the run is Collected.
-          {
-            key: "balanceBundle",
-            label: "Balance bundle",
-            render: (r) => (r.pickupStatus === "Collected" ? Math.max(0, Number(r.bundleCount || 0) - Number(r.collectedBundle || 0)) : "—"),
-          },
+          // Bundles assigned but not yet collected — all of them while the run is Pending.
+          { key: "balanceBundle", label: "Balance bundle", render: (r) => balanceOf(r) },
         ]}
         collection={pickupAssigns}
         initialNewValues={{ paymentStatus: "Unpaid", pickupStatus: "Pending" }}
-        canDelete={(r) => r.pickupStatus !== "Collected"}
+        canDelete={(r) => !isStarted(r)}
         // Paid is final — the edit form can't flip it back to Unpaid either.
         isFieldDisabled={(key, saved) => key === "paymentStatus" && saved?.paymentStatus === "Paid"}
         confirmStatusToggle
@@ -181,7 +187,7 @@ export function PickupAssignScreen() {
       {collectRow && (
         <Modal
           title={
-            collectRow.pickupStatus === "Collected"
+            isStarted(collectRow)
               ? `Edit collected bundle — "${collectRow.transport}" (${collectRow.lrNo})`
               : `Mark "${collectRow.transport}" (${collectRow.lrNo}) as collected`
           }

@@ -22,7 +22,8 @@ function toFrontend(doc: BackendDoc, submitted?: Record<string, unknown>): Deliv
     whatsapp: String(doc.whatsapp ?? ""),
     from: countryName(doc.from) ?? (submitted?.from as string | undefined) ?? "",
     toCountry: countryName(doc.toCountry) ?? (submitted?.toCountry as string | undefined) ?? "",
-    charge: doc.charge !== undefined ? String(doc.charge) : "0",
+    // "" when the partner has no charge yet, so the invoice screen can ask for it.
+    charge: doc.charge !== undefined && doc.charge !== null ? String(doc.charge) : "",
     status: statusToStr(doc.status),
   };
 }

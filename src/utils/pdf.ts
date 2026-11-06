@@ -1,8 +1,9 @@
 /**
- * PDF documents for the Invoicing screen — Invoice and Delivery note share one
- * letterhead/table style (company header, grey-headed bordered tables, signature
- * line). Built with jsPDF's standard fonts, so text is kept to plain Latin
- * characters (amounts print as "AED").
+ * Report PDFs (packing list, container manifest, table exports) — one
+ * letterhead/table style (company header, grey-headed bordered tables). The
+ * Invoice and Delivery note use the company's printed forms instead (formPdf.ts).
+ * Built with jsPDF's standard fonts, so text is kept to plain Latin characters
+ * (amounts print as "AED").
  */
 
 const COMPANY = "INTROLINES PVT LTD";
@@ -82,145 +83,6 @@ function partyBoxes(d: Doc, y: number, from: PartyDetails, to: PartyDetails, toL
     margin: { left: MARGIN, right: MARGIN },
   });
   return (d.doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
-}
-
-function signatures(d: Doc, y: number, left: string, right: string) {
-  d.doc.setFont("times", "normal");
-  d.doc.setFontSize(11);
-  d.doc.text(left, MARGIN + 2, y);
-  d.doc.text(right, 110, y);
-}
-
-export interface DeliveryNoteData {
-  lrNo: string;
-  bookingDate: string;
-  sender: PartyDetails;
-  receiver: PartyDetails;
-  rows: { bundleNo: string; product: string; qty: string }[];
-}
-
-export async function downloadDeliveryNotePdf(filename: string, data: DeliveryNoteData): Promise<void> {
-  const d = await newDoc("DELIVERY NOTE");
-  let y = infoRow(d, 44, ["LR No.", data.lrNo, "Booking Date", data.bookingDate]);
-  y = partyBoxes(d, y + 8, data.sender, data.receiver);
-
-  d.doc.setFont("times", "bold");
-  d.doc.setFontSize(13);
-  d.doc.text("Description", MARGIN, y + 11);
-  const totalQty = data.rows.reduce((sum, r) => sum + (Number(r.qty) || 0), 0);
-  // Always at least 10 rows so the sheet still reads as a form when the list is short.
-  const body = [...data.rows.map((r) => [r.bundleNo, r.product, r.qty])];
-  while (body.length < 10) body.push(["", "", ""]);
-  d.autoTable(d.doc, {
-    startY: y + 13,
-    theme: "grid",
-    styles: baseStyles,
-    head: [["Bundle No", "Products", "Qty"]],
-    headStyles,
-    body,
-    foot: [[{ content: "Total Qty", colSpan: 2 }, String(totalQty || "")]],
-    footStyles: headStyles,
-    showFoot: "lastPage",
-    columnStyles: { 0: { cellWidth: 30 }, 2: { cellWidth: 30 } },
-    margin: { left: MARGIN, right: MARGIN },
-  });
-  const end = (d.doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
-  signatures(d, Math.min(end + 22, 285), "Delivery Boy Name & Signature", "Receiver Name & Signature");
-  d.doc.save(filename);
-}
-
-export interface InvoiceData {
-  invoiceNo: string;
-  bookingDate: string;
-  receiver: PartyDetails;
-  /** Numbered charge rows (freight, discount, delivery…). Rate/qty are left blank for rows that don't have them. */
-  rows: { description: string; rate?: number; qty?: number; amount: number }[];
-  /** Conditional extra-charge lines — printed with their condition, amount left blank when 0/undefined. */
-  extraCharges: { bundleHandling?: number; gccTransport?: number };
-  /** Pickup charge for a booking made without bill — the "Without Bill" line is printed only when this is set. */
-  withoutBillPickupCharge?: number;
-  /** Brand handling charge for a "Branded" booking — the line is printed only when this is set. */
-  brandHandlingCharge?: number;
-  total: number;
-}
-
-const signedMoney = (n: number) => (n < 0 ? `- ${pdfMoney(-n)}` : pdfMoney(n));
-
-export async function downloadInvoicePdf(filename: string, data: InvoiceData): Promise<void> {
-  const d = await newDoc("INVOICE");
-  let y = infoRow(d, 44, ["Invoice No.", data.invoiceNo, "Booking Date", data.bookingDate]);
-
-  d.autoTable(d.doc, {
-    startY: y + 8,
-    theme: "grid",
-    styles: baseStyles,
-    head: [["Customer Name (Receiver Name & Details)"]],
-    headStyles,
-    body: [[[data.receiver.name, ...data.receiver.lines.filter(Boolean)].join("\n")]],
-    bodyStyles: { minCellHeight: 30, valign: "top" },
-    margin: { left: MARGIN, right: MARGIN },
-  });
-  y = (d.doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
-
-  d.doc.setFont("times", "bold");
-  d.doc.setFontSize(13);
-  d.doc.text("Description", MARGIN, y + 11);
-
-  // At least 6 numbered rows so the sheet still reads as a form when there are fewer charges.
-  const numbered: string[][] = data.rows.map((r, i) => [
-    String(i + 1),
-    r.description,
-    r.rate !== undefined ? pdfMoney(r.rate) : "",
-    r.qty !== undefined ? String(r.qty) : "",
-    signedMoney(r.amount),
-  ]);
-  while (numbered.length < 6) numbered.push([String(numbered.length + 1), "", "", "", ""]);
-  const extra = (label: string, note: string, amount?: number) => [
-    { content: `${label}  (${note})`, colSpan: 4, styles: { fontStyle: "italic" as const } },
-    amount ? pdfMoney(amount) : "",
-  ];
-  d.autoTable(d.doc, {
-    startY: y + 13,
-    theme: "grid",
-    styles: baseStyles,
-    head: [["SL No", "Bundles", "Rate (per Bundle)", "Qty", "Amount"]],
-    headStyles,
-    body: [
-      ...numbered,
-      ...(data.withoutBillPickupCharge !== undefined
-        ? [
-            [
-              { content: "Without Bill Extra Charge - Pickup Charge  (applicable only if sent without bill)", colSpan: 4, styles: { fontStyle: "italic" as const } },
-              pdfMoney(data.withoutBillPickupCharge),
-            ],
-          ]
-        : []),
-      ...(data.brandHandlingCharge !== undefined
-        ? [
-            [
-              { content: "Brand Handling Charge  (applicable only for branded products)", colSpan: 4, styles: { fontStyle: "italic" as const } },
-              pdfMoney(data.brandHandlingCharge),
-            ],
-          ]
-        : []),
-      extra("Bundle Handling Charge", "applicable only if below 5 bundles", data.extraCharges.bundleHandling),
-      extra("GCC Transport Charge", "applicable only for delivery outside UAE", data.extraCharges.gccTransport),
-    ],
-    foot: [
-      [{ content: "Total Amount", colSpan: 4 }, pdfMoney(data.total)],
-      [{ content: "Payable Amount", colSpan: 4 }, pdfMoney(data.total)],
-    ],
-    footStyles: headStyles,
-    showFoot: "lastPage",
-    columnStyles: { 0: { cellWidth: 18 }, 2: { cellWidth: 38 }, 3: { cellWidth: 26 }, 4: { cellWidth: 36 } },
-    margin: { left: MARGIN, right: MARGIN },
-  });
-  const end = (d.doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
-  d.doc.setFont("times", "italic");
-  d.doc.setFontSize(9.5);
-  d.doc.text("Note: Additional charge lines above apply only under their stated condition; otherwise leave blank/remove before sending.", MARGIN, end + 5);
-  signatures(d, Math.min(end + 24, 285), "Authorised Person Name & Signature", "");
-  d.doc.save(filename);
 }
 
 export interface PackingListData {

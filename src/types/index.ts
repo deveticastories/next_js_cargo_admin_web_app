@@ -21,8 +21,8 @@ export type RepackingStatus = "Ready to Ship" | "Repacking Required";
 /** Pre-booking's own status flow — starts at "Pending" on creation, moves to "Collected" once the sender's goods are picked up. Distinct from the generic `Status` used elsewhere. */
 export type PreBookingStatus = "Pending" | "Collected" | "Canceled";
 
-/** Pickup assign's collection status — starts at "Pending", moves to "Collected" once the transport has picked up. */
-export type PickupStatus = "Pending" | "Collected";
+/** Pickup assign's collection status — "Pending" until bundles are recorded, then "Partially Collected" or "Collected" (all assigned bundles). */
+export type PickupStatus = "Pending" | "Partially Collected" | "Collected";
 
 export type PaymentStatus = "Unpaid" | "Paid";
 
@@ -123,7 +123,7 @@ export interface PickupAssign extends BaseRecord {
   amount: number;
   paymentStatus: PaymentStatus | "";
   pickupStatus: PickupStatus | "";
-  /** How many bundles were actually collected — set when `pickupStatus` moves to "Collected". 0 until then. */
+  /** How many bundles were actually collected — set when `pickupStatus` leaves "Pending". 0 until then. */
   collectedBundle: number;
 }
 
@@ -229,10 +229,10 @@ export interface Invoice {
   container?: string;
   deliveryPartnerId: string;
   deliveryPartner?: string;
-  /** The delivery partner's charge — owed to the partner, not part of `amount`. */
+  /** The delivery partner's current charge (cargo-backend includes it in `additionalCharges` and `amount`). */
   deliveryCharge?: number;
   subtotal: number;
-  /** Booking's pickup + brand handling charges. */
+  /** Booking's pickup + brand handling charges plus the delivery partner's charge. */
   additionalCharges: number;
   receivableDiscount: number;
   /** Invoice total. */

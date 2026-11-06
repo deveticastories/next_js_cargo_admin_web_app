@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCargoData } from "@/components/providers/CargoDataProvider";
 import { MasterView } from "@/components/shared/MasterView";
+import { canonicalPlace } from "@/services/PricingServices";
 import { money } from "@/utils/format";
 
 /** Last-mile delivery vendors at the receiving end. */
@@ -19,6 +20,12 @@ export function DeliveryPartnersScreen() {
   };
 
   const countryOptions = countries.items.map((c) => c.name);
+  // New partners start "From" Dubai — the Country master's own spelling of it when it has one
+  // (e.g. "UAE" / "United Arab Emirates", which count as Dubai elsewhere too).
+  const defaultFrom =
+    countryOptions.find((n) => n.trim().toLowerCase() === "dubai") ??
+    countryOptions.find((n) => canonicalPlace(n) === "UAE") ??
+    "Dubai";
 
   return (
     <MasterView
@@ -55,6 +62,7 @@ export function DeliveryPartnersScreen() {
         { key: "charge", label: "Charge", render: (r) => money(r.charge) },
       ]}
       collection={deliveryPartners}
+      initialNewValues={{ from: defaultFrom }}
     />
   );
 }

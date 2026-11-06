@@ -1,13 +1,15 @@
 "use client";
 
 /**
- * Two independent documents generated from a booking:
+ * Two independent documents generated from a booking — same flow, figures and
+ * PDF forms as the mobile app's Invoices and Delivery notes screens:
  *  - Invoice: saved through cargo-backend's `/invoices` module, which computes
  *    every amount (India → UAE price for the booking's UOM × repacked bundles,
- *    plus pickup and brand handling charges, minus the receiver's discount)
- *    and numbers it. Invoices can't be edited, so one per booking is kept.
- *  - Delivery note: sender, booking date and the recorded packing list
- *    (fetched from cargo-backend's `/packages` module, one bundle per row).
+ *    plus pickup, brand handling and the delivery partner's charge, minus the
+ *    receiver's discount) and numbers it. Invoices can't be edited, so one per
+ *    booking is kept.
+ *  - Delivery note: consignee and the recorded packing list (fetched from
+ *    cargo-backend's `/packages` module), one PDF per booking.
  */
 
 import { useEffect, useState } from "react";
@@ -19,10 +21,18 @@ import { MultiSearchSelect } from "@/components/ui/MultiSearchSelect";
 import { DataTable } from "@/components/ui/DataTable";
 import { Skeleton, SkeletonTable } from "@/components/ui/Skeleton";
 import { canonicalPlace } from "@/services/PricingServices";
-import { flattenPackage, getPackageByBooking, type PackageItemRow } from "@/services/PackageServices";
+import {
+  computeBundleMarkIds,
+  flattenPackage,
+  getAllPackages,
+  getPackageByBooking,
+  nameOf,
+  packageBookingId,
+  type PackageItemRow,
+} from "@/services/PackageServices";
 import { fmtDate, money } from "@/utils/format";
-import { downloadDeliveryNotePdf, downloadInvoicePdf } from "@/utils/pdf";
-import type { Invoice, PricingRoute } from "@/types";
+import { downloadDeliveryNoteFormPdf, downloadInvoiceFormPdf, type InvoiceSheet } from "@/utils/formPdf";
+import type { DeliveryPartner, Invoice, PricingRoute } from "@/types";
 
 type PackingRow = PackageItemRow;
 
@@ -42,6 +52,9 @@ export function InvoicingScreen() {
   // Inline fix for a missing / misspelled route price, so the invoice isn't a dead end.
   const [newPrice, setNewPrice] = useState("");
   const [savingPrice, setSavingPrice] = useState(false);
+  // Inline charge for a delivery partner that has none yet — saved to the partner once.
+  const [newCharge, setNewCharge] = useState("");
+  const [savingCharge, setSavingCharge] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [dnContainerId, setDnContainerId] = useState("");
   // Delivery note bookings are multi-select (one PDF per booking).
@@ -61,8 +74,8 @@ export function InvoicingScreen() {
   const existingInvoice = booking ? invoices.items.find((i) => i.bookingId === booking.id) : undefined;
 
   // Preview only — mirrors cargo-backend's invoice calculation, which is what actually gets saved:
-  // India → UAE price for the booking's UOM × repacked bundles, plus the booking's pickup and brand
-  // handling charges, minus the receiver's flat discount.
+  // India → UAE price for the booking's UOM × repacked bundles, plus the booking's pickup, brand and
+  // bundle handling charges and the delivery partner's charge, minus the receiver's flat discount.
   const receiver = receivers.items.find((r) => r.name === booking?.receiver);
   // Same tolerant match as cargo-backend's invoice lookup: any casing, and "Dubai" / "United Arab Emirates" count as UAE.
   const isIndiaUae = (p: PricingRoute) => canonicalPlace(p.from) === "India" && canonicalPlace(p.to) === "UAE";
@@ -71,60 +84,120 @@ export function InvoicingScreen() {
   const unitPrice = route ? Number(route.price) : 0;
   const bundles = booking ? Number(booking.actualBundle || 0) : 0;
   const subtotal = unitPrice * bundles;
-  const additionalCharges = booking ? Number(booking.pickupCharge || 0) + Number(booking.brandHandlingCharge || 0) : 0;
+  const additionalCharges = booking
+    ? Number(booking.pickupCharge || 0) + Number(booking.brandHandlingCharge || 0) + Number(booking.bundleHandlingCharge || 0)
+    : 0;
   const discountAmt = receiver ? Number(receiver.discount || 0) : 0;
-  const total = subtotal + additionalCharges - discountAmt;
-  // The chosen delivery partner's charge is added on top of the server's total here only —
-  // cargo-backend's saved `total` leaves it out. Saved invoices read the partner's current charge.
-  const selectedPartner = deliveryPartners.items.find((d) => d.id === deliveryPartnerId);
-  const deliveryCharge = existingInvoice ? Number(existingInvoice.deliveryCharge || 0) : Number(selectedPartner?.charge || 0);
+  // Delivery partner: only active ones, starting on the partner serving the receiver's country
+  // (from India when there's a choice); the other active partners follow.
+  const receiverCountry = canonicalPlace(receiver?.country);
+  const activePartners = deliveryPartners.items.filter((d) => d.status !== "Inactive");
+  const matchingPartners = receiverCountry ? activePartners.filter((d) => canonicalPlace(d.toCountry) === receiverCountry) : [];
+  const suggestedPartner = matchingPartners.find((d) => canonicalPlace(d.from) === "India") ?? matchingPartners[0];
+  const partnerChoices = [...matchingPartners, ...activePartners.filter((d) => !matchingPartners.includes(d))];
+  const selectedPartner = activePartners.find((d) => d.id === deliveryPartnerId) ?? suggestedPartner;
+  // The charge lives on the delivery partner; when the partner has none yet it's entered here once.
+  const hasCharge = (d?: DeliveryPartner) => d !== undefined && d.charge !== undefined && d.charge !== "";
+  const deliveryCharge = existingInvoice ? existingInvoice.deliveryCharge : hasCharge(selectedPartner) ? Number(selectedPartner!.charge) : undefined;
+  const needsCharge = !existingInvoice && selectedPartner !== undefined && !hasCharge(selectedPartner);
+  const total = subtotal + additionalCharges - discountAmt + (deliveryCharge ?? 0);
   const blocker = !booking
     ? ""
-    : bundles <= 0
-      ? "Repacking hasn't been confirmed for this booking yet — the invoice needs its final bundle count."
-      : !route
-        ? `No India → UAE price for "${booking.bundleType || "this unit"}" yet${otherUoms.length ? ` (priced so far: ${otherUoms.join(", ")})` : ""}.`
-        : discountAmt > subtotal + additionalCharges
-          ? "The receiver's discount is larger than the invoice amount."
-          : "";
+    : !existingInvoice && !selectedPartner
+      ? activePartners.length
+        ? "Choose a delivery partner."
+        : "No active delivery partners yet — add one under Masters → Delivery partners."
+      : bundles <= 0
+        ? "Repacking hasn't been confirmed for this booking yet — the invoice needs its final bundle count."
+        : !route
+          ? `No India → UAE price for "${booking.bundleType || "this unit"}" yet${otherUoms.length ? ` (priced so far: ${otherUoms.join(", ")})` : ""}.`
+          : discountAmt > subtotal + additionalCharges
+            ? "The receiver's discount is larger than the invoice amount."
+            : needsCharge
+              ? `Add ${selectedPartner?.name || "the delivery partner"}'s charge below before generating the invoice.`
+              : "";
 
   const partyOf = (name: string, kind: "sender" | "receiver"): { name: string; lines: string[] } => {
     const found = (kind === "sender" ? senders.items : receivers.items).find((p) => p.name === name);
     return { name, lines: found ? [found.location, found.whatsapp ? `Ph: ${found.whatsapp}` : ""] : [] };
   };
 
-  /** What the screen and PDF show as an invoice's total: the server's total plus its delivery partner's charge. */
-  const invoiceTotal = (invoice: Invoice) => invoice.amount + Number(invoice.deliveryCharge || 0);
+  /** Bundle marks and per-product pieces ("Shirt – 40 pcs") for a booking, from the packing lists. */
+  const packingSummary = async (bookingId: string): Promise<{ marks: string; pieces: string[] }> => {
+    const packages = await getAllPackages().catch(() => []);
+    const markIds = computeBundleMarkIds(packages);
+    const pkg = packages.find((p) => packageBookingId(p) === bookingId);
+    const bundlesSorted = [...(pkg?.bundles ?? [])].sort((a, b) => a.bundleNo - b.bundleNo);
+    const marks = bundlesSorted.map((b) => (b._id ? markIds.get(b._id) : undefined)).filter((m): m is number => m !== undefined);
+    const perProduct = new Map<string, number>();
+    for (const line of bundlesSorted.flatMap((b) => b.products)) {
+      const name = nameOf(line.product, products.items) || "Items";
+      perProduct.set(name, (perProduct.get(name) ?? 0) + (Number(line.quantity) || 0));
+    }
+    const pieces = [...perProduct.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([name, n]) => `${name} – ${n} pcs`);
+    return { marks: marks.join(", "), pieces };
+  };
 
-  /** Prints a saved invoice — every figure comes from the invoice cargo-backend stored, plus the delivery partner's charge. */
+  /** Prints a saved invoice on the company's invoice form — every figure comes from the invoice cargo-backend stored. */
   const downloadSavedInvoice = async (invoice: Invoice) => {
     const b = bookings.items.find((x) => x.id === invoice.bookingId);
-    const qty = Number(b?.actualBundle || 0);
+    const qty = Number(b?.actualBundle || b?.bundleCount || 0);
     const pickup = Number(b?.pickupCharge || 0);
     const brand = Number(b?.brandHandlingCharge || 0);
+    const bundle = Number(b?.bundleHandlingCharge || 0);
+    // Whatever the total holds beyond the bundles, pickup / brand / bundle handling and discount is the delivery partner's charge.
+    const delivery = Math.round((invoice.amount - invoice.subtotal + invoice.receivableDiscount - pickup - brand - bundle) * 100) / 100;
     // The booking's charges may have been edited since — only itemise them if they still add up.
-    const split = pickup + brand === invoice.additionalCharges;
-    const rows = [
+    const split = delivery >= 0;
+    const { marks, pieces } = b ? await packingSummary(b.id) : { marks: "", pieces: [] };
+    const rows: InvoiceSheet["rows"] = [
       {
-        description: `Freight India → UAE (${b?.bundleType || "Bundle"})`,
+        commodity: "GARMENTS",
+        pieces,
+        particular: b?.bundleType || "Bundle",
+        qty,
         rate: qty ? invoice.subtotal / qty : undefined,
-        qty: qty || undefined,
         amount: invoice.subtotal,
       },
-      ...(!split && invoice.additionalCharges ? [{ description: "Additional charges", amount: invoice.additionalCharges }] : []),
-      ...(invoice.receivableDiscount ? [{ description: "Receiver discount", amount: -invoice.receivableDiscount }] : []),
-      ...(invoice.deliveryCharge ? [{ description: `Delivery charge (${invoice.deliveryPartner ?? "delivery partner"})`, amount: invoice.deliveryCharge }] : []),
+      ...(split
+        ? [
+            ...(pickup ? [{ particular: "Pickup charge (without bill)", amount: pickup }] : []),
+            ...(brand ? [{ particular: "Brand handling charge", amount: brand }] : []),
+            ...(bundle ? [{ particular: "Bundle handling charge", amount: bundle }] : []),
+            ...(delivery > 0 ? [{ particular: "Delivery partner charges", amount: delivery }] : []),
+          ]
+        : invoice.additionalCharges
+          ? [{ particular: "Additional charges", amount: invoice.additionalCharges }]
+          : []),
+      ...(invoice.receivableDiscount ? [{ particular: "Receiver discount", amount: -invoice.receivableDiscount }] : []),
     ];
-    await downloadInvoicePdf(`${invoice.code}.pdf`, {
-      invoiceNo: invoice.code,
-      bookingDate: b ? fmtDate(b.date) : "",
-      receiver: partyOf(b?.receiver ?? "", "receiver"),
-      rows,
-      extraCharges: {},
-      withoutBillPickupCharge: split && pickup ? pickup : undefined,
-      brandHandlingCharge: split && brand ? brand : undefined,
-      total: invoiceTotal(invoice),
-    });
+    const party = partyOf(b?.receiver ?? "", "receiver");
+    await downloadInvoiceFormPdf(`${invoice.code}.pdf`, [
+      {
+        // The form prints the phone number as-is (no "Ph:" label).
+        consignee: { name: party.name, lines: party.lines.map((l) => l.replace(/^Ph:\s*/, "")) },
+        date: fmtDate(invoice.createdAt || b?.date || new Date().toISOString()),
+        invoiceNo: invoice.code,
+        mark: marks || "-",
+        packages: qty ? String(qty) : "-",
+        rows,
+        total: invoice.amount,
+      },
+    ]);
+  };
+
+  /** Saves the delivery partner's charge (only offered while it has none); it's read-only here afterwards. */
+  const saveDeliveryCharge = async () => {
+    if (!selectedPartner || newCharge === "" || !(Number(newCharge) >= 0)) return;
+    setSavingCharge(true);
+    try {
+      await deliveryPartners.update(selectedPartner.id, { ...selectedPartner, charge: newCharge });
+      setNewCharge("");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to save the charge.");
+    } finally {
+      setSavingCharge(false);
+    }
   };
 
   /** Adds the missing India → UAE price for the booking's UOM, so the invoice isn't a dead end. */
@@ -147,16 +220,21 @@ export function InvoicingScreen() {
       return;
     }
     if (existingInvoice) {
-      await downloadSavedInvoice(existingInvoice);
+      setGenerating(true);
+      try {
+        await downloadSavedInvoice(existingInvoice);
+      } finally {
+        setGenerating(false);
+      }
       return;
     }
-    if (!deliveryPartnerId) {
+    if (!selectedPartner) {
       alert("Choose a delivery partner.");
       return;
     }
     setGenerating(true);
     try {
-      const saved = await invoices.create({ containerId: container.id, bookingId: booking.id, deliveryPartnerId });
+      const saved = await invoices.create({ containerId: container.id, bookingId: booking.id, deliveryPartnerId: selectedPartner.id });
       await downloadSavedInvoice(saved);
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed to save the invoice.");
@@ -209,14 +287,14 @@ export function InvoicingScreen() {
     try {
       for (const b of dnSelectedBookings) {
         const rows = packingByBooking[b.id] ?? (await fetchPackingRows(b.id, masters).catch(() => []));
-        await downloadDeliveryNotePdf(`${b.code}-delivery-note.pdf`, {
+        await downloadDeliveryNoteFormPdf(`${b.code}-delivery-note.pdf`, {
           lrNo: b.code,
-          bookingDate: fmtDate(b.date),
-          sender: partyOf(b.sender, "sender"),
           receiver: partyOf(b.receiver, "receiver"),
           rows: rows.map((l) => ({ bundleNo: String(l.bundleNumber), product: [l.product, l.fabric].filter(Boolean).join(" - "), qty: l.qty })),
         });
       }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Couldn't create the PDF.");
     } finally {
       setDnGenerating(false);
     }
@@ -245,7 +323,12 @@ export function InvoicingScreen() {
             <Field
               field={{ key: "b", label: "Booking ID", type: "search-select", placeholder: "Choose booking ID", options: containerBookings.map((b) => b.code) }}
               value={booking?.code ?? ""}
-              onChange={(_, code) => setBookingId(containerBookings.find((b) => b.code === code)?.id ?? "")}
+              onChange={(_, code) => {
+                setBookingId(containerBookings.find((b) => b.code === code)?.id ?? "");
+                setDeliveryPartnerId("");
+                setNewPrice("");
+                setNewCharge("");
+              }}
             />
           )}
           {booking && (
@@ -271,7 +354,7 @@ export function InvoicingScreen() {
                   <span>{money(existingInvoice?.subtotal ?? subtotal)}</span>
                 </div>
                 <div className="cc-total-row">
-                  <span>Additional charges (pickup + brand handling)</span>
+                  <span>Additional charges (pickup + brand + bundle handling)</span>
                   <span>{money(existingInvoice?.additionalCharges ?? additionalCharges)}</span>
                 </div>
                 <div className="cc-total-row">
@@ -287,22 +370,40 @@ export function InvoicingScreen() {
                 />
               ) : (
                 <Field
-                  field={{ key: "dp", label: "Delivery partner", type: "select", required: true, options: deliveryPartners.items.map((d) => d.name) }}
-                  value={deliveryPartners.items.find((d) => d.id === deliveryPartnerId)?.name ?? ""}
-                  onChange={(_, name) => setDeliveryPartnerId(deliveryPartners.items.find((d) => d.name === name)?.id ?? "")}
+                  field={{ key: "dp", label: "Delivery partner", type: "select", required: true, options: partnerChoices.map((d) => d.name) }}
+                  value={selectedPartner?.name ?? ""}
+                  onChange={(_, name) => {
+                    setDeliveryPartnerId(partnerChoices.find((d) => d.name === name)?.id ?? "");
+                    setNewCharge("");
+                  }}
                 />
               )}
-              {(existingInvoice || selectedPartner) && (
+              {deliveryCharge !== undefined && (
                 <div style={{ margin: "8px 0" }}>
                   <div className="cc-total-row">
-                    <span>Delivery partner charge ({existingInvoice?.deliveryPartner ?? selectedPartner?.name})</span>
+                    <span>Delivery partner charge ({(existingInvoice ? existingInvoice.deliveryPartner : selectedPartner?.name) || "—"})</span>
                     <span>+{money(deliveryCharge)}</span>
                   </div>
                 </div>
               )}
+              {needsCharge && (
+                <div style={{ display: "flex", gap: 8, alignItems: "flex-end", margin: "8px 0" }}>
+                  <div style={{ flex: 1 }}>
+                    <Field
+                      field={{ key: "dc", label: "Delivery partner charge (AED)", type: "number", placeholder: "Charge" }}
+                      value={newCharge}
+                      onChange={(_, v) => setNewCharge(v)}
+                    />
+                    <div className="cc-panel-desc">Saved to this partner once; it can&apos;t be changed here later.</div>
+                  </div>
+                  <Button size="sm" onClick={saveDeliveryCharge} loading={savingCharge} disabled={newCharge === "" || !(Number(newCharge) >= 0)}>
+                    Save
+                  </Button>
+                </div>
+              )}
               <div className="cc-total-row" style={{ fontWeight: 700, fontSize: 15 }}>
                 <span>Total</span>
-                <span>{money(existingInvoice ? invoiceTotal(existingInvoice) : total + deliveryCharge)}</span>
+                <span>{money(existingInvoice ? existingInvoice.amount : total)}</span>
               </div>
               {existingInvoice ? (
                 <div className="cc-panel-desc" style={{ marginTop: 6 }}>
@@ -458,7 +559,7 @@ export function InvoicingScreen() {
           </div>
         </div>
         {invoices.loading ? (
-          <SkeletonTable columns={7} />
+          <SkeletonTable columns={9} />
         ) : (
           <DataTable
             columns={[
@@ -466,8 +567,18 @@ export function InvoicingScreen() {
               { key: "createdAt", label: "Date", render: (r) => (r.createdAt ? fmtDate(r.createdAt) : "—") },
               { key: "bookingCode", label: "Booking ID" },
               { key: "container", label: "Container", render: (r) => r.container ?? "—" },
+              {
+                key: "receiver",
+                label: "Receiver",
+                render: (r) => {
+                  const b = bookings.items.find((x) => x.id === r.bookingId);
+                  const country = receivers.items.find((x) => x.name === b?.receiver)?.country;
+                  return [b?.receiver, country].filter(Boolean).join(" · ") || "—";
+                },
+              },
               { key: "deliveryPartner", label: "Delivery partner", render: (r) => r.deliveryPartner ?? "—" },
-              { key: "amount", label: "Total", render: (r) => money(invoiceTotal(r)) },
+              { key: "deliveryCharge", label: "Delivery charges", render: (r) => (r.deliveryCharge !== undefined ? money(r.deliveryCharge) : "—") },
+              { key: "amount", label: "Total", render: (r) => money(r.amount) },
               {
                 key: "download",
                 label: "",

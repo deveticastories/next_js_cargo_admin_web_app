@@ -69,6 +69,7 @@ export const DEFAULT_STATUS_STYLE: StatusStyle = {
 export const STATUS_STYLES: Record<string, StatusStyle> = {
   Pending: { bg: colors.warnBg, fg: colors.warn },
   Collected: { bg: colors.successBg, fg: colors.success },
+  "Partially Collected": { bg: colors.infoBg, fg: colors.info },
   Canceled: { bg: colors.dangerBg, fg: colors.danger },
   Active: { bg: colors.successBg, fg: colors.success },
   Inactive: { bg: colors.dangerBg, fg: colors.danger },

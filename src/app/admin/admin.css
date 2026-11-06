@@ -1078,7 +1078,7 @@ table.cc-table tr.cc-table-expanded:hover > td {
    compact column (it only ever holds a few digits); the rest share the width. */
 .cc-line-item-products {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) 96px minmax(0, 1.2fr) minmax(0, 1.6fr) minmax(0, 2fr) var(--control-h);
+  grid-template-columns: minmax(0, 2fr) 96px minmax(0, 1.2fr) minmax(0, 1.6fr) minmax(0, 2fr);
   gap: 12px;
   align-items: end;
 }
@@ -1098,18 +1098,6 @@ table.cc-table tr.cc-table-expanded:hover > td {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.cc-line-remove {
-  align-self: end;
-  width: var(--control-h);
-  height: var(--control-h);
-  justify-content: center;
-  color: var(--text-faint);
-  border: 1px solid transparent;
-}
-.cc-line-remove:not(:disabled):hover {
-  color: var(--danger);
-  background: var(--danger-bg);
 }
 /* Small status selects rendered inside table cells (Pre-booking, Receipt entry). */
 .cc-table select {
@@ -1175,7 +1163,7 @@ table.cc-table tr.cc-table-expanded:hover > td {
 /* Small laptops / landscape tablets: the packing-list line drops to two rows. */
 @media (max-width: 1280px) {
   .cc-line-item-products {
-    grid-template-columns: minmax(0, 2fr) 96px minmax(0, 1.4fr) var(--control-h);
+    grid-template-columns: minmax(0, 2fr) 96px minmax(0, 1.4fr);
   }
   .cc-line-item-products > :nth-child(4) {
     grid-column: 1 / 2;
@@ -1227,9 +1215,6 @@ table.cc-table tr.cc-table-expanded:hover > td {
   }
   .cc-line-item-products > :nth-child(n) {
     grid-column: auto;
-  }
-  .cc-line-remove {
-    justify-self: end;
   }
 }
 

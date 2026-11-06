@@ -380,10 +380,6 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
     setLines([...lines, emptyLine()]);
     setSavedMessage("");
   };
-  const removeLine = (index: number) => {
-    setLines(lines.filter((_, i) => i !== index));
-    setSavedMessage("");
-  };
 
   // cargo-backend requires a real Product and Unit on every product line it stores — a line with any
   // other field filled in (qty, fabric, description) but no product or unit picked can't be saved.
@@ -894,14 +890,6 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
                             </div>
                             );
                           })}
-                          <Button
-                            variant="ghost"
-                            className="cc-line-remove"
-                            onClick={() => removeLine(index)}
-                            aria-label="Remove line"
-                          >
-                            <X size={15} />
-                          </Button>
                         </div>
                       </div>
                     );

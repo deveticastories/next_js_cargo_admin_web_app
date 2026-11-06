@@ -101,5 +101,5 @@ export const PAGE_TITLES: Record<string, [string, string]> = {
   "/admin/credit-note": ["Credit note", "Petty cash fund, carried forward month to month"],
   "/admin/expenses": ["Daily expense", "Log day-to-day operational spends"],
   "/admin/receipt-entry": ["Receipt Entry", "Record payments received from customers"],
-  "/admin/reports": ["Reports", "Booking activity by month, container, country and customer"],
+  "/admin/reports": ["Reports", "Stuffed bookings by container, country, customer and delivery partner"],
 };
