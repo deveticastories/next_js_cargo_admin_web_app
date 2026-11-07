@@ -33,6 +33,11 @@ function refName(ref: unknown, submitted: unknown): string {
   return typeof submitted === "string" ? submitted : "";
 }
 
+function refField(ref: unknown, field: string): string {
+  if (ref && typeof ref === "object" && field in ref) return String((ref as Record<string, unknown>)[field] ?? "");
+  return "";
+}
+
 function pickupLrNo(ref: unknown, submitted?: Record<string, unknown>): string {
   if (ref && typeof ref === "object" && "lrNo" in ref) return String((ref as { lrNo?: unknown }).lrNo ?? "");
   return (submitted?.pickupOption as string | undefined) ?? "";
@@ -60,6 +65,11 @@ function toFrontend(doc: BackendDoc, submitted?: Record<string, unknown>): Booki
     pickupCharge: Number(doc.pickupCharge ?? 0),
     bundleHandlingCharge: Number(doc.bundleHandlingCharge ?? 0),
     actualBundle: Number(doc.bundle ?? 0),
+    senderLocation: refField(doc.sender, "location"),
+    senderCountry: refField(doc.sender, "country"),
+    receiverLocation: refField(doc.receiver, "location"),
+    receiverCountry: refField(doc.receiver, "country"),
+    createdAt: doc.createdAt ? String(doc.createdAt) : undefined,
     status: statusToStr(doc.status),
   };
 }

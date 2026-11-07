@@ -19,7 +19,7 @@ import { ApiError } from "@/utils/apiClient";
 import { computeBundleMarkIds, getAllPackages, nameOf, packageBookingId, type PackageBundleDoc } from "@/services/PackageServices";
 import { updateStuffStatus } from "@/services/BookingServices";
 import { fmtDate, todayISO } from "@/utils/format";
-import { downloadTablePdf } from "@/utils/pdf";
+import { downloadFramedTablePdf, downloadTablePdf } from "@/utils/pdf";
 
 export function ReadyToStuffScreen() {
   const { bookings, products, units, fabrics } = useCargoData();
@@ -199,7 +199,7 @@ export function ReadyToStuffScreen() {
           });
         }
       }
-      await downloadTablePdf(`container-packing-list-${todayISO()}.pdf`, {
+      await downloadFramedTablePdf(`container-packing-list-${todayISO()}.pdf`, {
         title: "CONTAINER PACKING LIST",
         info: [
           ["Generated On", fmtDate(todayISO())],

@@ -159,6 +159,14 @@ export interface Booking extends BaseRecord {
    * whatever was entered when the booking was first made.
    */
   actualBundle: number;
+  /** Sender's location/country, read off the populated customer ref — "" when unknown. */
+  senderLocation?: string;
+  senderCountry?: string;
+  /** Receiver's location/country, read off the populated customer ref — "" when unknown. */
+  receiverLocation?: string;
+  receiverCountry?: string;
+  /** When the booking record was created (server `createdAt`) — the booking time. */
+  createdAt?: string;
 }
 
 /**

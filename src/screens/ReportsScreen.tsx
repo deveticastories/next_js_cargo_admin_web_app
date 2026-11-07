@@ -16,7 +16,7 @@ import { StatCard } from "@/components/ui/StatCard";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { computeBundleMarkIds, getAllPackages, packageBookingId, type PackageDoc } from "@/services/PackageServices";
 import { fmtDate, money } from "@/utils/format";
-import { downloadTablePdf } from "@/utils/pdf";
+import { downloadFramedTablePdf } from "@/utils/pdf";
 import type { Booking } from "@/types";
 
 type GroupBy = "container" | "country" | "customer" | "partner";
@@ -187,8 +187,9 @@ export function ReportsScreen() {
     try {
       const label = GROUP_LABELS[groupBy];
       const slug = g.label.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "") || "group";
-      await downloadTablePdf(`booking-report-${groupBy}-${slug}-${from}-to-${to}.pdf`, {
+      await downloadFramedTablePdf(`booking-report-${groupBy}-${slug}-${from}-to-${to}.pdf`, {
         title: `${label.toUpperCase()} WISE BOOKING REPORT`,
+        landscape: true,
         info: [
           [label, [g.label, g.sublabel].filter(Boolean).join(" · ")],
           ["Period", rangeLabel],

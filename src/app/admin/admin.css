@@ -1495,3 +1495,88 @@ table.cc-table tr.cc-table-expanded:hover > td {
 .cc-alert-warn.cc-data-banner {
   justify-content: flex-start;
 }
+
+/** Booking list "Sender → Receiver" cell — mirrors the mobile app's booking card route. */
+.cc-route {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 300px;
+}
+.cc-route-end {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+.cc-route-end:last-child {
+  align-items: flex-end;
+  text-align: right;
+}
+.cc-route-name {
+  font-weight: 600;
+  color: var(--text);
+}
+.cc-route-place {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.cc-route-from {
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+.cc-route-to {
+  background: var(--success-bg);
+  color: var(--success);
+}
+.cc-route-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.cc-route-line::before,
+.cc-route-line::after {
+  content: "";
+  width: 14px;
+  border-top: 1.5px dashed var(--text-faint);
+}
+.cc-booked-at {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.cc-booked-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  color: var(--text-soft);
+}
+.cc-route-summary {
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+}
+.cc-route-countries {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -4px 0 8px;
+}
+.cc-searchselect-sublabel {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--text-soft);
+}

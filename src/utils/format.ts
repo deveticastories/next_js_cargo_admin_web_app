@@ -16,7 +16,17 @@ export const fmtDate = (date?: string): string =>
       })
     : "—";
 
-export const money = (n: number | string | undefined): string =>
+/** Time of day, e.g. "10:42 AM" — for timestamps like a booking's `createdAt`. */
+export const fmtTime = (date?: string): string =>
+  date
+    ? new Date(date).toLocaleTimeString("en-GB", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      })
+    : "—";
+
+export const money =(n: number | string | undefined): string =>
   `AED ${Number(n || 0).toLocaleString("en-AE", { maximumFractionDigits: 2 })}`;
 
 /**

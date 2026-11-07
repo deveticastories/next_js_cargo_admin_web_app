@@ -378,6 +378,17 @@ export function InvoicingScreen() {
                   }}
                 />
               )}
+              {/* The partner's From → To countries, as the mobile app shows under each partner. */}
+              {(() => {
+                const p = existingInvoice ? deliveryPartners.items.find((d) => d.name === existingInvoice.deliveryPartner) : selectedPartner;
+                return p && (p.from || p.toCountry) ? (
+                  <div className="cc-route-countries">
+                    <span className="cc-route-place cc-route-from">{p.from || "—"}</span>
+                    <span className="cc-route-line" aria-hidden />
+                    <span className="cc-route-place cc-route-to">{p.toCountry || "—"}</span>
+                  </div>
+                ) : null;
+              })()}
               {deliveryCharge !== undefined && (
                 <div style={{ margin: "8px 0" }}>
                   <div className="cc-total-row">

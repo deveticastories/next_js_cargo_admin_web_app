@@ -40,6 +40,7 @@ import { DataTable } from "@/components/ui/DataTable";
 import { Field } from "@/components/ui/Field";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
+import { BookingRoute, bookingPlace } from "@/components/ui/BookingRoute";
 
 /** One flattened row of a ready-to-ship packing-list table (both "Added items" and "Saved packing lists"). */
 interface SavedItemRow extends BundleLineItem {
@@ -578,7 +579,8 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
     if (!booking || source.length === 0) return;
     const partyOf = (name: string, kind: "sender" | "receiver") => {
       const found = (kind === "sender" ? senders.items : receivers.items).find((p) => p.name === name);
-      return { name, lines: found ? [found.location, found.whatsapp ? `Ph: ${found.whatsapp}` : ""] : [] };
+      const place = bookingPlace(booking, kind, senders.items, receivers.items);
+      return { name, lines: found || place ? [place, found?.whatsapp ? `Ph: ${found.whatsapp}` : ""] : [] };
     };
     setError("");
     try {
@@ -743,9 +745,17 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
     setCopyNote(null);
   };
 
+  const selectedBooking = bookings.items.find((b) => b.id === bookingId);
+
   return (
     <>
       <div className="cc-card" style={{ padding: 18 }}>
+        {/* Sender → receiver with their places, like the mobile packing workspace. */}
+        {selectedBooking && (
+          <div className="cc-route-summary">
+            <BookingRoute booking={selectedBooking} senders={senders.items} receivers={receivers.items} />
+          </div>
+        )}
         <div className="cc-grid-2" style={{ marginBottom: 16 }}>
           <SearchableSelect
             label="Booking ID"

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Download, Plus } from "lucide-react";
+import { Clock, Download, Plus } from "lucide-react";
 import { useCargoData } from "@/components/providers/CargoDataProvider";
 import { StatCard } from "@/components/ui/StatCard";
 import { SearchBar } from "@/components/ui/SearchBar";
@@ -13,9 +13,10 @@ import { Modal } from "@/components/ui/Modal";
 import { Field } from "@/components/ui/Field";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { SkeletonTable } from "@/components/ui/Skeleton";
+import { BookingRoute } from "@/components/ui/BookingRoute";
 import { ApiError } from "@/utils/apiClient";
 import { getAllPackages, packageBookingId } from "@/services/PackageServices";
-import { fmtDate, money, todayISO, toDateInputValue } from "@/utils/format";
+import { fmtDate, fmtTime, money, todayISO, toDateInputValue } from "@/utils/format";
 import { downloadTablePdf, pdfMoney } from "@/utils/pdf";
 import type { Booking, PickupAssign } from "@/types";
 
@@ -451,7 +452,7 @@ export function BookingScreen() {
           </div>
         </div>
         {bookings.loading ? (
-          <SkeletonTable columns={14} />
+          <SkeletonTable columns={13} />
         ) : (
           <DataTable
             columns={[
@@ -475,9 +476,32 @@ export function BookingScreen() {
                 ),
               },
               { key: "code", label: "Booking ID" },
-              { key: "sender", label: "Sender" },
-              { key: "receiver", label: "Receiver" },
-              { key: "date", label: "Date", render: (r) => fmtDate(r.date) },
+              // Sender → receiver with the from/to places highlighted, like the mobile app's booking card.
+              {
+                key: "route",
+                label: "Sender → Receiver",
+                render: (r) => (
+                  <BookingRoute
+                    booking={r}
+                    senders={senders.items}
+                    receivers={receivers.items}
+                  />
+                ),
+              },
+              {
+                key: "date",
+                label: "Booked on",
+                render: (r) => (
+                  <div className="cc-booked-at">
+                    <span>{fmtDate(r.date)}</span>
+                    {r.createdAt && (
+                      <span className="cc-booked-time cc-mono">
+                        <Clock size={11} /> {fmtTime(r.createdAt)}
+                      </span>
+                    )}
+                  </div>
+                ),
+              },
               { key: "bundleCount", label: "Actual bundle" },
               // Set by the Repacking screen's "Confirm" action, not the booking form — 0/"—" until repacking's been confirmed once.
               {
@@ -564,6 +588,9 @@ export function BookingScreen() {
               label="Sender"
               value={(form.sender as string) ?? ""}
               options={senders.items.map((s) => s.name)}
+              optionSublabels={Object.fromEntries(
+                senders.items.map((s) => [s.name, s.location]),
+              )}
               placeholder="Search sender"
               onChange={(v) => set("sender", v)}
               onCreateNew={(q) => addCustomerFromSearch("sender", q)}
@@ -572,6 +599,12 @@ export function BookingScreen() {
               label="Receiver"
               value={(form.receiver as string) ?? ""}
               options={receivers.items.map((r) => r.name)}
+              optionSublabels={Object.fromEntries(
+                receivers.items.map((r) => [
+                  r.name,
+                  [r.location, r.country].filter(Boolean).join(", "),
+                ]),
+              )}
               placeholder="Search receiver"
               createLabel="Add new receiver"
               onChange={(v) => set("receiver", v)}

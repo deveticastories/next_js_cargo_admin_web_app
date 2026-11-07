@@ -7,6 +7,7 @@ import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, Res
 import { useCargoData } from "@/components/providers/CargoDataProvider";
 import { DataTable } from "@/components/ui/DataTable";
 import { Badge } from "@/components/ui/Badge";
+import { BookingRoute } from "@/components/ui/BookingRoute";
 import { Skeleton, SkeletonStatGrid, SkeletonTable } from "@/components/ui/Skeleton";
 import { AnimatedNumber } from "@/components/dashboard/AnimatedNumber";
 import { colors } from "@/utils/colors";
@@ -25,7 +26,7 @@ const QUICK_LINKS = [
 
 /** Landing screen: hero, animated key numbers, charts of the cargo pipeline, and recent activity. */
 export function DashboardScreen() {
-  const { bookings, containers, dailyExpenses, employees } = useCargoData();
+  const { bookings, containers, dailyExpenses, employees, senders, receivers } = useCargoData();
   const loading = bookings.loading || containers.loading || dailyExpenses.loading || employees.loading;
 
   const stats = useMemo(() => {
@@ -241,13 +242,16 @@ export function DashboardScreen() {
             </Link>
           </div>
           {loading ? (
-            <SkeletonTable columns={4} rows={5} />
+            <SkeletonTable columns={3} rows={5} />
           ) : (
             <DataTable
               columns={[
                 { key: "code", label: "Booking ID" },
-                { key: "sender", label: "Sender" },
-                { key: "receiver", label: "Receiver" },
+                {
+                  key: "route",
+                  label: "Sender → Receiver",
+                  render: (r) => <BookingRoute booking={r} senders={senders.items} receivers={receivers.items} />,
+                },
                 { key: "status", label: "Status", render: (r) => <Badge value={r.stuffed ? "Stuffed" : "Pending"} /> },
               ]}
               rows={bookings.items.slice(-5).reverse()}

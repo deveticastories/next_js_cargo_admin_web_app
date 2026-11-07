@@ -11,6 +11,8 @@ export interface SearchableSelectProps {
   options: string[];
   /** Display text per option value — shown and searched in place of the raw value. */
   optionLabels?: Record<string, string>;
+  /** Muted second line per option value (e.g. a customer's "Location, Country") — also searched. */
+  optionSublabels?: Record<string, string>;
   disabled?: boolean;
   placeholder?: string;
   onChange: (value: string) => void;
@@ -30,6 +32,7 @@ export function SearchableSelect({
   value,
   options,
   optionLabels,
+  optionSublabels,
   disabled,
   placeholder = "Search…",
   onChange,
@@ -51,7 +54,9 @@ export function SearchableSelect({
   }, [open]);
 
   const labelOf = (option: string) => optionLabels?.[option] ?? option;
-  const filtered = options.filter((o) => labelOf(o).toLowerCase().includes(query.toLowerCase()));
+  const filtered = options.filter((o) =>
+    `${labelOf(o)} ${optionSublabels?.[o] ?? ""}`.toLowerCase().includes(query.toLowerCase()),
+  );
 
   const openPanel = () => {
     setQuery("");
@@ -107,6 +112,7 @@ export function SearchableSelect({
                   onClick={() => select(option)}
                 >
                   {labelOf(option)}
+                  {optionSublabels?.[option] && <span className="cc-searchselect-sublabel">{optionSublabels[option]}</span>}
                 </div>
               ))
             )}
