@@ -40,7 +40,7 @@ import { DataTable } from "@/components/ui/DataTable";
 import { Field } from "@/components/ui/Field";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
-import { BookingRoute, bookingPlace } from "@/components/ui/BookingRoute";
+import { BookingRoute } from "@/components/ui/BookingRoute";
 
 /** One flattened row of a ready-to-ship packing-list table (both "Added items" and "Saved packing lists"). */
 interface SavedItemRow extends BundleLineItem {
@@ -577,10 +577,11 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
             return { bundleNumber: n, bundleMarkId: items[0]?.bundleMarkId, items };
           });
     if (!booking || source.length === 0) return;
+    // Same as the app: the party's location and WhatsApp number.
     const partyOf = (name: string, kind: "sender" | "receiver") => {
       const found = (kind === "sender" ? senders.items : receivers.items).find((p) => p.name === name);
-      const place = bookingPlace(booking, kind, senders.items, receivers.items);
-      return { name, lines: found || place ? [place, found?.whatsapp ? `Ph: ${found.whatsapp}` : ""] : [] };
+      const location = (kind === "sender" ? booking.senderLocation : booking.receiverLocation) || found?.location || "";
+      return { name, lines: [location, found?.whatsapp ? `Ph: ${found.whatsapp}` : ""] };
     };
     setError("");
     try {
@@ -593,13 +594,12 @@ export function BundleWorkspace({ mode, bookings }: BundleWorkspaceProps) {
           .sort((a, b) => a.bundleNumber - b.bundleNumber)
           .map((b) => ({
             bundleNo: b.bundleNumber,
-            bundleMarkId: b.bundleMarkId,
-            // Weights are entered once per bundle, on its first line.
-            netWeight: b.items[0]?.netWeight ?? "",
-            grossWeight: b.items[0]?.grossWeight ?? "",
             items: b.items
               .filter((i) => i.product || i.qty || i.unit || i.fabric || i.description)
-              .map((i) => ({ product: i.product, qty: i.qty, unit: i.unit, fabric: i.fabric })),
+              .map((i) => ({
+                product: [i.product, i.fabric].filter(Boolean).join(" - "),
+                qty: [i.qty, i.unit].filter(Boolean).join(" "),
+              })),
           })),
       });
     } catch {

@@ -19,7 +19,7 @@ import { ApiError } from "@/utils/apiClient";
 import { computeBundleMarkIds, flattenPackage, getAllPackages, packageBookingId, type PackageDoc } from "@/services/PackageServices";
 import { updateStuffStatus } from "@/services/BookingServices";
 import { downloadText, fmtDate, money } from "@/utils/format";
-import { downloadContainerManifestPdf, downloadTablePdf, pdfMoney, type PartyDetails } from "@/utils/pdf";
+import { downloadTablePdf, pdfMoney, type PartyDetails } from "@/utils/pdf";
 import { colors } from "@/utils/colors";
 import type { Booking } from "@/types";
 
@@ -76,14 +76,20 @@ export function StuffingScreen() {
   // Already-stuffed containers aren't offered again — same rule as the Containers table's "Stuffed" badge.
   const stuffedContainerIds = new Set(stuffings.items.map((s) => s.container));
   const availableContainers = containers.items.filter((c) => c.status !== "Stuffed" && !stuffedContainerIds.has(c.id));
-  // Sender / receiver master details, for the expanded container's list and its PDF.
-  const senderDetails = (name: string): PartyDetails => {
+  // Sender / receiver details, for the expanded container's list and its PDF — the booking's own
+  // place first, else the master's, as in the app.
+  const senderDetails = (booking?: Booking): PartyDetails => {
+    const name = booking?.sender ?? "";
     const found = senders.items.find((p) => p.name === name);
+    if (!booking) return { name, lines: [] };
     return { name, lines: found ? [found.location, found.whatsapp ? `Ph: ${found.whatsapp}` : ""] : [] };
   };
-  const receiverDetails = (name: string): PartyDetails => {
+  const receiverDetails = (booking?: Booking): PartyDetails => {
+    const name = booking?.receiver ?? "";
     const found = receivers.items.find((p) => p.name === name);
-    return { name, lines: found ? [[found.location, found.country].filter(Boolean).join(", "), found.whatsapp ? `Ph: ${found.whatsapp}` : ""] : [] };
+    if (!booking) return { name, lines: [] };
+    const place = [booking.receiverLocation || found?.location, booking.receiverCountry || found?.country].filter(Boolean).join(", ");
+    return { name, lines: [place, found?.whatsapp ? `Ph: ${found.whatsapp}` : ""] };
   };
 
   /**
@@ -109,8 +115,8 @@ export function StuffingScreen() {
       bookingId,
       slNo,
       bookingCode: booking?.code ?? "—",
-      sender: senderDetails(booking?.sender ?? ""),
-      receiver: receiverDetails(booking?.receiver ?? ""),
+      sender: senderDetails(booking),
+      receiver: receiverDetails(booking),
       bundles: booking ? booking.actualBundle || booking.bundleCount : 0,
       bundleMarks: bundleMarksFor(bookingId),
       receivableAmount: invoice ? Number(invoice.amount || 0) : undefined,
@@ -129,7 +135,9 @@ export function StuffingScreen() {
   const bookingChargeRow = (booking: Booking, summary: BookingSummaryRowData): BookingChargeRowData => {
     const senderRec = senders.items.find((p) => p.name === booking.sender);
     const receiverRec = receivers.items.find((p) => p.name === booking.receiver);
-    const route = pricing.items.find((p) => p.to === receiverRec?.location || p.to === receiverRec?.country);
+    const receiverLocation = booking.receiverLocation || receiverRec?.location || "";
+    const receiverCountry = booking.receiverCountry || receiverRec?.country || "";
+    const route = pricing.items.find((p) => p.to === receiverLocation || p.to === receiverCountry);
     const { receivableAmount, deliveryPartnerAmount } = summary;
     return {
       id: booking.id,
@@ -192,6 +200,7 @@ export function StuffingScreen() {
     try {
       await downloadTablePdf(`${booking.code}-charges.pdf`, {
         title: "BOOKING CHARGES",
+        landscape: true,
         info: bookingPdfInfo(container, booking),
         head: [
           "Sl No", "Booking ID", "Sender Name", "Sender Contact", "Receiver Name", "Receiver Contact", "No. of Bundles", "Bundle Mark",
@@ -228,6 +237,7 @@ export function StuffingScreen() {
     try {
       await downloadTablePdf(`${booking.code}-bundles.pdf`, {
         title: "BUNDLE DETAILS",
+        landscape: true,
         info: bookingPdfInfo(container, booking),
         head: ["Sl No", "Booking ID", "Bundles", "Products", "Qty", "Fabrics", "Minimum Bundles", "Branded / Normal", "With / Without Bill"],
         body: itemRows.map((r) => [String(r.slNo), r.bookingCode, r.bundle, r.product, r.qty, r.fabric, r.minimumBundles, r.productType, r.billOption]),
@@ -262,8 +272,8 @@ export function StuffingScreen() {
     setError("");
     const totalBookings = stuffedRows.reduce((sum, r) => sum + r.bookingCount, 0);
     try {
-      await downloadTablePdf("stuffed-list.pdf", {
-        title: "STUFFED LIST",
+      await downloadTablePdf("container-list.pdf", {
+        title: "CONTAINER LIST",
         info: [
           ["No. of Containers", String(stuffedRows.length)],
           ["No. of Bookings", String(totalBookings)],
@@ -275,18 +285,34 @@ export function StuffingScreen() {
         foot: ["", "", "Total", String(totalBookings), ""],
       });
     } catch {
-      setError("Failed to generate the stuffed list PDF.");
+      setError("Failed to generate the container list PDF.");
     }
   };
 
   const downloadStuffingList = async (row: (typeof stuffedRows)[number], rows: BookingSummaryRowData[]) => {
     setError("");
     try {
-      await downloadContainerManifestPdf(`${row.containerCode}-booking-list.pdf`, {
-        containerCode: row.containerCode,
-        containerName: row.containerName,
-        stuffedDate: fmtDate(row.stuffedDate),
-        rows,
+      const sum = (pick: (r: BookingSummaryRowData) => number | undefined) => rows.reduce((n, r) => n + (pick(r) ?? 0), 0);
+      const party = (p: PartyDetails) => [p.name, ...p.lines.filter(Boolean)].join(", ");
+      await downloadTablePdf(`${row.containerCode}-booking-list.pdf`, {
+        title: "CONTAINER BOOKING LIST",
+        landscape: true,
+        info: [
+          ["Container ID", row.containerCode],
+          ["Container Name", row.containerName],
+          ["Stuffed Date", row.stuffedDate ? fmtDate(row.stuffedDate) : "-"],
+          ["No. of Bookings", String(rows.length)],
+        ],
+        head: ["Booking ID", "Receiver Details", "Bundle Mark", "Bundle Count", "Delivery Partner Payable Amount", "Total Receivable Amount"],
+        body: rows.map((r) => [
+          r.bookingCode,
+          party(r.receiver),
+          r.bundleMarks || "-",
+          String(r.bundles),
+          pdfMoneyOrDash(r.deliveryPartnerAmount),
+          pdfMoneyOrDash(r.receivableAmount),
+        ]),
+        foot: ["", "", "Total", String(sum((r) => r.bundles)), pdfMoney(sum((r) => r.deliveryPartnerAmount)), pdfMoney(sum((r) => r.receivableAmount))],
       });
     } catch {
       setError("Failed to generate the container booking list PDF.");

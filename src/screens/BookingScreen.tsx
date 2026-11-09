@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Clock, Download, Plus } from "lucide-react";
+import { Download, Plus } from "lucide-react";
 import { useCargoData } from "@/components/providers/CargoDataProvider";
 import { StatCard } from "@/components/ui/StatCard";
 import { SearchBar } from "@/components/ui/SearchBar";
@@ -16,7 +16,7 @@ import { SkeletonTable } from "@/components/ui/Skeleton";
 import { BookingRoute } from "@/components/ui/BookingRoute";
 import { ApiError } from "@/utils/apiClient";
 import { getAllPackages, packageBookingId } from "@/services/PackageServices";
-import { fmtDate, fmtTime, money, todayISO, toDateInputValue } from "@/utils/format";
+import { fmtDate, money, todayISO, toDateInputValue } from "@/utils/format";
 import { downloadTablePdf, pdfMoney } from "@/utils/pdf";
 import type { Booking, PickupAssign } from "@/types";
 
@@ -159,6 +159,7 @@ export function BookingScreen() {
         );
       await downloadTablePdf(`bookings-${todayISO()}.pdf`, {
         title: "BOOKING LIST",
+        landscape: true,
         info: [
           ["Generated On", fmtDate(todayISO())],
           ["No. of Bookings", String(selectedBookings.length)],
@@ -491,16 +492,7 @@ export function BookingScreen() {
               {
                 key: "date",
                 label: "Booked on",
-                render: (r) => (
-                  <div className="cc-booked-at">
-                    <span>{fmtDate(r.date)}</span>
-                    {r.createdAt && (
-                      <span className="cc-booked-time cc-mono">
-                        <Clock size={11} /> {fmtTime(r.createdAt)}
-                      </span>
-                    )}
-                  </div>
-                ),
+                render: (r) => fmtDate(r.date),
               },
               { key: "bundleCount", label: "Actual bundle" },
               // Set by the Repacking screen's "Confirm" action, not the booking form — 0/"—" until repacking's been confirmed once.

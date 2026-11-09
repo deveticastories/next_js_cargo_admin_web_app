@@ -14,9 +14,10 @@ import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { StatCard } from "@/components/ui/StatCard";
 import { SkeletonTable } from "@/components/ui/Skeleton";
+import { Place, usePlaceColor } from "@/components/ui/Place";
 import { computeBundleMarkIds, getAllPackages, packageBookingId, type PackageDoc } from "@/services/PackageServices";
 import { fmtDate, money } from "@/utils/format";
-import { downloadFramedTablePdf } from "@/utils/pdf";
+import { downloadFramedTablePdf, type PdfCell } from "@/utils/pdf";
 import type { Booking } from "@/types";
 
 type GroupBy = "container" | "country" | "customer" | "partner";
@@ -42,7 +43,8 @@ interface ReportRow {
   id: string;
   booking: Booking;
   day: string;
-  receiver: { name: string; location: string; contact: string };
+  /** The receiver's place: the booking's own, else the receiver master's (as in the app). */
+  receiver: { name: string; location: string; country: string; contact: string };
   bundleMarks: string;
   bundles: number;
   partner: string;
@@ -63,6 +65,7 @@ interface ReportGroup {
 
 export function ReportsScreen() {
   const { bookings, containers, stuffings, senders, receivers, invoices } = useCargoData();
+  const placeColor = usePlaceColor();
   const loading = bookings.loading || containers.loading || stuffings.loading || invoices.loading;
 
   const now = new Date();
@@ -123,7 +126,8 @@ export function ReportsScreen() {
             day: localDay(b.date),
             receiver: {
               name: b.receiver,
-              location: [rc?.location, rc?.country].filter(Boolean).join(", "),
+              location: b.receiverLocation || rc?.location || "",
+              country: b.receiverCountry || rc?.country || "",
               contact: rc?.whatsapp ?? "",
             },
             bundleMarks: bundleMarksFor(b.id),
@@ -153,13 +157,13 @@ export function ReportsScreen() {
       } else if (groupBy === "customer") {
         key = b.sender.toLowerCase() || "~unknown";
         label = b.sender || "—";
-        sublabel = senders.items.find((s) => s.name === b.sender)?.location;
+        sublabel = b.senderLocation || senders.items.find((s) => s.name === b.sender)?.location;
       } else if (groupBy === "partner") {
         // The partner is chosen on the invoice, so bookings not invoiced yet have none.
         key = r.partner.toLowerCase() || "~uninvoiced";
         label = r.partner || "Not invoiced yet";
       } else {
-        const country = receivers.items.find((x) => x.name === b.receiver)?.country ?? "";
+        const country = r.receiver.country;
         key = country.toLowerCase() || "~unknown";
         label = country || "Country not set";
       }
@@ -174,7 +178,7 @@ export function ReportsScreen() {
     return [...map.values()].sort((a, b) =>
       a.key.startsWith("~") ? 1 : b.key.startsWith("~") ? -1 : b.rows.length - a.rows.length || a.label.localeCompare(b.label)
     );
-  }, [rows, groupBy, containerOf, senders.items, receivers.items]);
+  }, [rows, groupBy, containerOf, senders.items]);
 
   const totalBundles = rows.reduce((n, r) => n + r.bundles, 0);
   const totalReceivable = rows.reduce((n, r) => n + r.receivable, 0);
@@ -186,28 +190,39 @@ export function ReportsScreen() {
     setDownloading(g.key);
     try {
       const label = GROUP_LABELS[groupBy];
+      // Places print in their place colour, as in the app.
+      const groupName: PdfCell =
+        groupBy === "country" && !g.key.startsWith("~")
+          ? { text: g.label, color: placeColor(g.label) }
+          : [g.label, g.sublabel].filter(Boolean).join(" · ");
       const slug = g.label.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "") || "group";
       await downloadFramedTablePdf(`booking-report-${groupBy}-${slug}-${from}-to-${to}.pdf`, {
         title: `${label.toUpperCase()} WISE BOOKING REPORT`,
         landscape: true,
         info: [
-          [label, [g.label, g.sublabel].filter(Boolean).join(" · ")],
+          [label, groupName],
           ["Period", rangeLabel],
           ["No. of Bookings", String(g.rows.length)],
           ["No. of Bundles", String(g.bundles)],
           ["Generated On", fmtDate(new Date().toISOString())],
         ],
         head: ["Sl No", "Booking ID", "Receiver Details", "Bundle Mark", "Bundle Count", "Delivery Partner", "Delivery Partner Payable Amount", "Total Receivable Amount"],
-        body: g.rows.map((r, i) => [
-          String(i + 1),
-          r.booking.code,
-          [r.receiver.name, r.receiver.location, r.receiver.contact].filter(Boolean).join(", ") || "-",
-          r.bundleMarks || "-",
-          String(r.bundles),
-          r.partner || "-",
-          r.invoiced ? money(r.payable) : "-",
-          r.invoiced ? money(r.receivable) : "-",
-        ]),
+        body: g.rows.map((r, i): PdfCell[] => {
+          const { name, location, country, contact } = r.receiver;
+          // The receiver's full details print in their country's colour.
+          const details = [name, location, country, contact].filter(Boolean).join(", ");
+          const place = country || location;
+          return [
+            String(i + 1),
+            r.booking.code,
+            details ? { text: details, color: place ? placeColor(place) : undefined } : "-",
+            r.bundleMarks || "-",
+            String(r.bundles),
+            r.partner || "-",
+            r.invoiced ? money(r.payable) : "-",
+            r.invoiced ? money(r.receivable) : "-",
+          ];
+        }),
         foot: ["", "", "", "Total", String(g.bundles), "", money(g.payable), money(g.receivable)],
       });
     } catch (err) {
@@ -292,8 +307,12 @@ export function ReportsScreen() {
               >
                 {open ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="cc-panel-title">{g.label}</div>
-                  {g.sublabel && <div className="cc-panel-desc">{g.sublabel}</div>}
+                  <div className="cc-panel-title">
+                    {groupBy === "country" && !g.key.startsWith("~") ? <Place country={g.label} /> : g.label}
+                  </div>
+                  {g.sublabel && (
+                    <div className="cc-panel-desc">{groupBy === "customer" ? <Place location={g.sublabel} /> : g.sublabel}</div>
+                  )}
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
                   <span className="cc-badge" style={{ background: "var(--info-bg)", color: "var(--info)" }}>
@@ -321,6 +340,7 @@ export function ReportsScreen() {
                         <th>Booking ID</th>
                         <th>Receiver</th>
                         <th>Location</th>
+                        <th>Country</th>
                         <th>Contact</th>
                         <th>Bundle mark</th>
                         <th>Bundles</th>
@@ -335,7 +355,8 @@ export function ReportsScreen() {
                             <td>{i + 1}</td>
                             <td>{r.booking.code}</td>
                             <td>{r.receiver.name || "—"}</td>
-                            <td>{r.receiver.location || "Location not set"}</td>
+                            <td>{r.receiver.location ? <Place location={r.receiver.location} /> : "Location not set"}</td>
+                            <td>{r.receiver.country ? <Place country={r.receiver.country} /> : "Country not set"}</td>
                             <td>{r.receiver.contact || "No contact number"}</td>
                             <td>{r.bundleMarks || "—"}</td>
                             <td>{r.bundles}</td>
@@ -347,7 +368,7 @@ export function ReportsScreen() {
                     </tbody>
                     <tfoot>
                       <tr style={{ fontWeight: 700 }}>
-                        <td colSpan={6}>Total</td>
+                        <td colSpan={7}>Total</td>
                         <td>{g.bundles}</td>
                         <td></td>
                         <td>{money(g.payable)}</td>

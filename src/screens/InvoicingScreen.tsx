@@ -171,7 +171,10 @@ export function InvoicingScreen() {
           : []),
       ...(invoice.receivableDiscount ? [{ particular: "Receiver discount", amount: -invoice.receivableDiscount }] : []),
     ];
-    const party = partyOf(b?.receiver ?? "", "receiver");
+    // The consignee's place is "location, country" — the booking's own, else the receiver master's (as in the app).
+    const rc = receivers.items.find((r) => r.name === b?.receiver);
+    const place = [b?.receiverLocation || rc?.location, b?.receiverCountry || rc?.country].filter(Boolean).join(", ");
+    const party = { name: b?.receiver ?? "", lines: b ? [place, rc?.whatsapp ? `Ph: ${rc.whatsapp}` : ""] : [] };
     await downloadInvoiceFormPdf(`${invoice.code}.pdf`, [
       {
         // The form prints the phone number as-is (no "Ph:" label).
